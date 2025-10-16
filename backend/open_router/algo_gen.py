@@ -190,17 +190,25 @@ def generate_algorithms_for_agents(selected_agents, ticker, progress_callback=No
             print(f"[error] Error generating algorithm for {agent_model}: {e}")
             failures.append(agent_model)
 
-    if failures or saved != total:
-        msg = f"Algorithm generation failed for: {', '.join(failures)}" if failures else "Algorithm generation incomplete"
+    # Only fail if NO algorithms were generated successfully
+    if saved == 0:
+        msg = "Algorithm generation completely failed - no valid algorithms generated"
         print(f"\u274c {msg}")
         if progress_callback:
             progress_callback(55, msg)
         return False
+    
+    # Warn about failures but continue with successful ones
+    if failures:
+        msg = f"⚠️ Algorithm generation failed for {len(failures)} model(s): {', '.join(failures)}. Continuing with {saved} successful algorithms."
+        print(msg)
+        if progress_callback:
+            progress_callback(55, msg)
+    else:
+        if progress_callback:
+            progress_callback(55, "All algorithms generated successfully!")
 
-    if progress_callback:
-        progress_callback(55, "All algorithms generated successfully!")
-
-    print(f"\n[done] Algorithm generation completed for {ticker}")
+    print(f"\n[done] Algorithm generation completed for {ticker} ({saved}/{total} successful)")
     return True
 
 def select_stock_file() -> tuple:

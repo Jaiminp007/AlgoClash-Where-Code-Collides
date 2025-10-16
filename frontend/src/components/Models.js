@@ -9,6 +9,7 @@ import mistralIcon from '../assets/mistral.png';
 import deepseekIcon from '../assets/deepseek.png';
 import grokIcon from '../assets/grok.png';
 import openrouterIcon from '../assets/openrouter.png';
+import ModelDirectory from './ModelDirectory';
 
 const modelAssets = [
 	{ label: 'OpenAI', img: openaiIcon },
@@ -63,6 +64,11 @@ const Models = () => {
 							</div>
 						))}
 					</div>
+				</div>
+				<div className="models-section">
+					<h2 style={{ color: '#FFD60A', marginTop: 30 }}>All Available Models</h2>
+					<p style={{ color: '#e6f0ff', marginTop: 6 }}>Sourced live from your backend ai_agents.json, grouped by provider.</p>
+					<ModelDirectory compact={false} />
 				</div>
 			</div>
 		</div>

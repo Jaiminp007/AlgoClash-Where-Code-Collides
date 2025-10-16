@@ -119,3 +119,93 @@
     font-size: 0.95rem;
   }
 }
+
+/* Directory view */
+.models-section {
+  width: 100%;
+  max-width: 1200px;
+  padding: 0 20px 40px 20px;
+}
+
+.models-directory {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.models-directory.compact .provider-group {
+  padding: 12px 14px;
+}
+
+.provider-group {
+  background: rgba(0, 29, 61, 0.5);
+  border: 1px solid #004d7a;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.provider-logo {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.provider-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.provider-name {
+  color: #FFD60A;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 800;
+  font-size: 1.2rem;
+}
+
+.provider-count {
+  color: #90e0ef;
+  font-size: 0.95rem;
+}
+
+.models-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-chip {
+  background: #001d3d;
+  border: 1px solid #003566;
+  color: #e6f0ff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.model-chip.more {
+  background: #0ea5a5;
+  border-color: #14b8a6;
+  color: #002b36;
+  text-decoration: none;
+}
+
+@media (min-width: 900px) {
+  .models-directory {
+    grid-template-columns: 1fr 1fr;
+  }
+}

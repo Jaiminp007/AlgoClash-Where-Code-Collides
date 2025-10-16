@@ -64,6 +64,13 @@ def run_simulation():
         data = request.get_json()
         agents = data.get('agents', [])
         stock = data.get('stock', 'AAPL_data.csv')
+        # Optional aggressiveness/volume control (default 1.0)
+        try:
+            volume_multiplier = float(data.get('volume_multiplier', 1.0))
+        except Exception:
+            volume_multiplier = 1.0
+        # Aggressive mode can be explicitly set by client; if not, infer from high volume
+        aggressive_mode = bool(data.get('aggressive_mode', False)) or (volume_multiplier >= 2.5)
         
         # Validate we have at least 2 agents
         if len(agents) < 2:
@@ -83,7 +90,7 @@ def run_simulation():
         # Start simulation in background thread
         thread = threading.Thread(
             target=run_simulation_background,
-            args=(sim_id, agents, stock)
+            args=(sim_id, agents, stock, volume_multiplier, aggressive_mode)
         )
         thread.daemon = True
         thread.start()
@@ -105,7 +112,7 @@ def get_simulation_status(sim_id):
         
     return jsonify(running_simulations[sim_id])
 
-def run_simulation_background(sim_id, agents, stock_file):
+def run_simulation_background(sim_id, agents, stock_file, volume_multiplier: float = 1.0, aggressive_mode: bool = False):
     """Run the simulation in background thread"""
     try:
         running_simulations[sim_id]["status"] = "running"
@@ -138,7 +145,8 @@ def run_simulation_background(sim_id, agents, stock_file):
                 running_simulations[sim_id]["progress"] = progress
                 running_simulations[sim_id]["message"] = str(message)
         
-        results = run_simulation_with_params(agents, ticker, progress_callback)
+        options = {"volume_multiplier": float(volume_multiplier), "aggressive_mode": bool(aggressive_mode)}
+        results = run_simulation_with_params(agents, ticker, progress_callback, options)
         
         running_simulations[sim_id]["status"] = "completed"
         running_simulations[sim_id]["progress"] = 100
@@ -159,11 +167,7 @@ def run_simulation_background(sim_id, agents, stock_file):
             gen_dir = backend_root / "generate_algo"
             if gen_dir.exists() and gen_dir.is_dir():
                 shutil.rmtree(gen_dir, ignore_errors=True)
-                # Recreate empty directory to avoid import path hiccups if any
-                try:
-                    gen_dir.mkdir(parents=True, exist_ok=True)
-                except Exception:
-                    pass
+                print("🧹 Cleaned up generated algorithms folder.")
                 running_simulations[sim_id]["message"] = (running_simulations[sim_id].get("message") or "") + "\n🧹 Cleaned generated algorithms."
         except Exception as ce:
             # Log cleanup failure but do not crash
