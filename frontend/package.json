@@ -2,6 +2,9 @@
   "name": "ai-trader-battlefield-frontend",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^13.3.0",
@@ -13,6 +16,9 @@
     "serve": "^14.2.4",
     "web-vitals": "^2.1.4",
     "yarn": "^1.22.22"
+  },
+  "overrides": {
+    "cross-spawn": "7.0.3"
   },
   "scripts": {
     "start": "react-scripts start",
