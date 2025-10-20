@@ -27,13 +27,6 @@ const Dashboard = () => {
   const [codePreview, setCodePreview] = useState('');
   const [codePreviewModel, setCodePreviewModel] = useState('');
   const lastPreviewModelRef = useRef('');
-  // Persistent algorithm previews and modal control
-  const [previews, setPreviews] = useState({}); // { modelName: code }
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [activePreviewModel, setActivePreviewModel] = useState('');
-  // Trade aggressiveness control
-  const [volumeMultiplier, setVolumeMultiplier] = useState(1);
-  const [aggressiveMode, setAggressiveMode] = useState(false);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -104,9 +97,6 @@ const Dashboard = () => {
   uniqueAgents.forEach(name => { initStates[name] = 'pending'; });
   setGenStates(initStates);
   lastGeneratingRef.current = null;
-  // Reset previews for a clean run
-  setPreviews({});
-  setActivePreviewModel('');
 
     try {
       const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -117,9 +107,7 @@ const Dashboard = () => {
         },
         body: JSON.stringify({
           agents: agents,
-          stock: selectedStock,
-          volume_multiplier: volumeMultiplier,
-          aggressive_mode: aggressiveMode,
+          stock: selectedStock
         })
       });
 
@@ -162,18 +150,13 @@ const Dashboard = () => {
         setSimulationStatus(message);
         setProgress(pct);
         if (data.code_preview) {
-          const incomingModel = String(data.preview_model || 'Unknown');
+          const incomingModel = String(data.preview_model || '');
           const incomingCode = String(data.code_preview);
           // Only update when a new model preview arrives or content changes
           if (incomingModel !== lastPreviewModelRef.current || incomingCode !== codePreview) {
             setCodePreview(incomingCode);
             setCodePreviewModel(incomingModel);
             lastPreviewModelRef.current = incomingModel;
-            // Persist into previews map for modal access
-            setPreviews(prev => ({ ...prev, [incomingModel]: incomingCode }));
-            if (!activePreviewModel) {
-              setActivePreviewModel(incomingModel);
-            }
           }
         }
         // Parse and reflect generation progress per model if present
@@ -229,36 +212,6 @@ const Dashboard = () => {
     lastGeneratingRef.current = null;
     setShowInstructions(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Preview modal derived values and actions
-  const previewModels = Object.keys(previews);
-  const activeCode = activePreviewModel ? previews[activePreviewModel] : '';
-
-  const handleCopyActive = async () => {
-    try {
-      if (activeCode) await navigator.clipboard.writeText(activeCode);
-    } catch (e) {
-      console.error('Copy failed:', e);
-    }
-  };
-
-  const handleDownloadActive = () => {
-    try {
-      if (!activeCode) return;
-      const blob = new Blob([activeCode], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const safe = (activePreviewModel || 'algorithm').replace(/[^a-z0-9_-]+/gi, '_');
-      a.href = url;
-      a.download = `${safe}.py`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Download failed:', e);
-    }
   };
 
   return (
@@ -403,33 +356,6 @@ const Dashboard = () => {
                   <li>Internet is required for market data and model generation.</li>
                 </ul>
               </div>
-              {/* Volume control */}
-              <div className="volume-control">
-                <label htmlFor="volume-mult">Trade size</label>
-                <input
-                  id="volume-mult"
-                  type="range"
-                  min="0.5"
-                  max="5"
-                  step="0.5"
-                  value={volumeMultiplier}
-                  onChange={(e) => setVolumeMultiplier(parseFloat(e.target.value))}
-                />
-                <span className="volume-value">{volumeMultiplier.toFixed(1)}x</span>
-              </div>
-
-              {/* Aggressive mode toggle */}
-              <div className="aggressive-toggle">
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={aggressiveMode}
-                    onChange={(e) => setAggressiveMode(e.target.checked)}
-                  />
-                  <span className="slider round"></span>
-                </label>
-                <span className={`toggle-label ${aggressiveMode ? 'on' : ''}`}>Aggressive mode</span>
-              </div>
             </div>
           ) : (
             <div className="progress-panel">
@@ -469,22 +395,13 @@ const Dashboard = () => {
         </div>
 
 
-        {/* Controls Row */}
+        {/* Start Button */}
         <button 
           className={`start-button ${isRunning ? 'running' : ''}`}
           onClick={handleStartSimulation}
           disabled={isRunning}
         >
           {isRunning ? 'RUNNING...' : 'START'}
-        </button>
-
-        <button
-          className={`preview-button ${previewModels.length ? '' : 'disabled'}`}
-          onClick={() => setIsPreviewOpen(true)}
-          disabled={!previewModels.length}
-          title={previewModels.length ? 'Preview generated algorithms' : 'No previews yet'}
-        >
-          Preview Algorithms
         </button>
 
         {/* Simulation Status */}
@@ -525,47 +442,6 @@ const Dashboard = () => {
           </div>
         )}
       </div>
-        {/* Preview Modal */}
-        {isPreviewOpen && (
-          <div className="preview-modal-overlay" onClick={() => setIsPreviewOpen(false)}>
-            <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="preview-modal-header">
-                <span>Algorithm Preview</span>
-                <button className="preview-close" onClick={() => setIsPreviewOpen(false)}>✕</button>
-              </div>
-              <div className="preview-modal-body">
-                {previewModels.length === 0 ? (
-                  <div className="preview-empty">No previews yet. Start a simulation to generate code.</div>
-                ) : (
-                  <>
-                    <div className="preview-tabs">
-                      {previewModels.map(m => (
-                        <button
-                          key={m}
-                          className={`preview-tab ${m === activePreviewModel ? 'active' : ''}`}
-                          onClick={() => setActivePreviewModel(m)}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="preview-actions">
-                      <button onClick={handleCopyActive} disabled={!activeCode}>Copy</button>
-                      <button onClick={handleDownloadActive} disabled={!activeCode}>Download</button>
-                    </div>
-                    <div className="preview-code">
-                      {activeCode ? (
-                        <pre><code>{activeCode}</code></pre>
-                      ) : (
-                        <div className="preview-empty">Select a model to view its algorithm.</div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
     </div>
   );
 };

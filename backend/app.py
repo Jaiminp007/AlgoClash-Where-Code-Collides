@@ -64,13 +64,6 @@ def run_simulation():
         data = request.get_json()
         agents = data.get('agents', [])
         stock = data.get('stock', 'AAPL_data.csv')
-        # Optional aggressiveness/volume control (default 1.0)
-        try:
-            volume_multiplier = float(data.get('volume_multiplier', 1.0))
-        except Exception:
-            volume_multiplier = 1.0
-        # Aggressive mode can be explicitly set by client; if not, infer from high volume
-        aggressive_mode = bool(data.get('aggressive_mode', False)) or (volume_multiplier >= 2.5)
         
         # Validate we have at least 2 agents
         if len(agents) < 2:
@@ -90,7 +83,7 @@ def run_simulation():
         # Start simulation in background thread
         thread = threading.Thread(
             target=run_simulation_background,
-            args=(sim_id, agents, stock, volume_multiplier, aggressive_mode)
+            args=(sim_id, agents, stock)
         )
         thread.daemon = True
         thread.start()
@@ -112,7 +105,7 @@ def get_simulation_status(sim_id):
         
     return jsonify(running_simulations[sim_id])
 
-def run_simulation_background(sim_id, agents, stock_file, volume_multiplier: float = 1.0, aggressive_mode: bool = False):
+def run_simulation_background(sim_id, agents, stock_file):
     """Run the simulation in background thread"""
     try:
         running_simulations[sim_id]["status"] = "running"
@@ -145,8 +138,7 @@ def run_simulation_background(sim_id, agents, stock_file, volume_multiplier: flo
                 running_simulations[sim_id]["progress"] = progress
                 running_simulations[sim_id]["message"] = str(message)
         
-        options = {"volume_multiplier": float(volume_multiplier), "aggressive_mode": bool(aggressive_mode)}
-        results = run_simulation_with_params(agents, ticker, progress_callback, options)
+        results = run_simulation_with_params(agents, ticker, progress_callback)
         
         running_simulations[sim_id]["status"] = "completed"
         running_simulations[sim_id]["progress"] = 100

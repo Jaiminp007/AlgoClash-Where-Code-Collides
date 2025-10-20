@@ -22,7 +22,7 @@ import importlib.util
 
 # Optimized AlgoAgent that loads the module once and calls it directly
 class AlgoAgent:
-    def __init__(self, name: str, module_path: str, symbol: str, volume_multiplier: float = 1.0):
+    def __init__(self, name: str, module_path: str, symbol: str):
         self.name = name
         self.symbol = symbol
         self._module_path = module_path
@@ -43,12 +43,7 @@ class AlgoAgent:
         # HOLD seeding cadence and preference
         self._seed_ticks = self._rng.randint(2, 5)
         self._seed_prefer_sell = self._rng.choice([True, False])
-        # Volume/aggressiveness scaling
-        try:
-            self._vol_mult = max(0.1, float(volume_multiplier))
-        except Exception:
-            self._vol_mult = 1.0
-        print(f"✅ {self.name}: Loaded with direct import optimization (vol×{self._vol_mult:.2f})")
+        print(f"✅ {self.name}: Loaded with direct import optimization")
 
     def _load_module(self) -> Callable[..., str]:
         """Load the execute_trade function from the agent's module path."""
@@ -77,15 +72,13 @@ class AlgoAgent:
             # Process the AI's decision (un-gated to allow margin/short; engine clamps size)
             if decision == "BUY":
                 self._hold_streak = 0
-                base = self._rng.randint(5, 18)
-                qty = max(1, int(round(base * self._vol_mult)))
+                qty = self._rng.randint(5, 18)
                 bid_price = round(price * (1.0 + self._buy_bps / 10000.0), 2)
                 return [{"agent": self.name, "side": "buy", "price": bid_price, "quantity": qty}]
 
             elif decision == "SELL":
                 self._hold_streak = 0
-                base = self._rng.randint(5, 18)
-                qty = max(1, int(round(base * self._vol_mult)))
+                qty = self._rng.randint(5, 18)
                 ask_price = round(price * (1.0 - self._sell_bps / 10000.0), 2)
                 return [{"agent": self.name, "side": "sell", "price": ask_price, "quantity": qty}]
 
@@ -96,13 +89,13 @@ class AlgoAgent:
                     self._hold_streak = 0 # Reset after seeding
                     # Prefer a small sell if configured and we hold stock; otherwise seed a buy
                     if self._seed_prefer_sell and stock > 0:
-                        qty = max(1, min(int(round(3 * self._vol_mult)), stock))
+                        qty = max(1, min(3, stock))
                         ask_price = round(price * (1.0 - self._sell_bps / 20000.0), 2)  # half offset
                         return [{"agent": self.name, "side": "sell", "price": ask_price, "quantity": qty}]
                     elif cash > price:
                         max_affordable = int(cash // price)
                         if max_affordable > 0:
-                            qty = max(1, min(int(round(3 * self._vol_mult)), max_affordable))
+                            qty = max(1, min(3, max_affordable))
                             bid_price = round(price * (1.0 + self._buy_bps / 20000.0), 2)  # half offset
                             return [{"agent": self.name, "side": "buy", "price": bid_price, "quantity": qty}]
         
@@ -113,13 +106,10 @@ class AlgoAgent:
             
         return []
 
-def run_simulation_with_params(selected_agents, symbol, progress_callback=None, options: Dict[str, Any] | None = None):
+def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
     """Run simulation with specific agents and stock symbol (API-driven)"""
     print(f"🤖 AI TRADER BATTLEFIELD - Market Simulation ({symbol})")
     print("=" * 50)
-    options = options or {}
-    vol_mult = float(options.get('volume_multiplier', 1.0))
-    aggressive = bool(options.get('aggressive_mode', False))
     
     # Silence noisy future warnings from pandas/yfinance during the battle
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -145,9 +135,9 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None, 
             progress_callback(50, f"Algorithm generation error: {e}")
         raise
     
-    return run_market_simulation(symbol, progress_callback, vol_mult, aggressive)
+    return run_market_simulation(symbol, progress_callback)
 
-def run_market_simulation(symbol, progress_callback=None, volume_multiplier: float = 1.0, aggressive_mode: bool = False):
+def run_market_simulation(symbol, progress_callback=None):
     """Run the market simulation part"""
     if progress_callback:
         progress_callback(65, "Preparing stock chart...")
@@ -228,7 +218,7 @@ def run_market_simulation(symbol, progress_callback=None, volume_multiplier: flo
     # Load each algorithm as a separate agent
     for p in algo_modules:
         try:
-            agent = AlgoAgent(name=p.stem, module_path=str(p), symbol=symbol, volume_multiplier=volume_multiplier)
+            agent = AlgoAgent(name=p.stem, module_path=str(p), symbol=symbol)
             agents.append(agent)
             print(f"✅ Loaded: {p.stem}")
         except Exception as e:
@@ -244,10 +234,8 @@ def run_market_simulation(symbol, progress_callback=None, volume_multiplier: flo
         progress_callback(80, f"Loaded {len(agents)} agents, adding liquidity providers...")
 
     # Add liquidity providers (excluded from the final leaderboard)
-    mm_qty1 = max(1, int(round(5 * volume_multiplier)))
-    mm_qty2 = max(1, int(round(3 * volume_multiplier)))
-    agents.append(MarketMakerAgent("Liquidity_MM1", spread_bps=8.0, quantity=mm_qty1))
-    agents.append(MarketMakerAgent("Liquidity_MM2", spread_bps=12.0, quantity=mm_qty2))
+    agents.append(MarketMakerAgent("Liquidity_MM1", spread_bps=8.0, quantity=5))
+    agents.append(MarketMakerAgent("Liquidity_MM2", spread_bps=12.0, quantity=3))
     print("➕ Added liquidity providers: Liquidity_MM1, Liquidity_MM2")
     
     if progress_callback:
@@ -255,26 +243,20 @@ def run_market_simulation(symbol, progress_callback=None, volume_multiplier: flo
 
     # Create simulation with ORDER BOOK ENABLED and faster processing
     from market.market_simulation import SimulationConfig
-    # Aggressive mode tweaks: longer run and more leverage
-    max_ticks = 120 if aggressive_mode else 100
-    cash_borrow = 40000.0 if aggressive_mode else 20000.0
-    max_short = 100 if aggressive_mode else 50
-    init_stock = 8 if aggressive_mode else 5
-    mm_seed = 220 if aggressive_mode else 150
     config = SimulationConfig(
-        max_ticks=max_ticks,
+        max_ticks=60,
         tick_sleep=0.01,  # 10ms between ticks for speed
         log_trades=True,
         log_orders=True,  # Enable order logging to see what's happening
         enable_order_book=True,  # ENABLE ORDER BOOK for proper matching
         initial_cash=10000.0,
-        initial_stock=init_stock,
-        mm_initial_stock=mm_seed,
+        initial_stock=5,
+    mm_initial_stock=150,
         # Enable margin and short selling to increase volume/ROE dispersion
         allow_negative_cash=True,
-        cash_borrow_limit=cash_borrow,
+        cash_borrow_limit=20000.0,
         allow_short=True,
-        max_short_shares=max_short,
+    max_short_shares=50,
         # Expire unfilled limit orders each tick to free reservations
         order_ttl_ticks=1
     )
@@ -285,7 +267,7 @@ def run_market_simulation(symbol, progress_callback=None, volume_multiplier: flo
     try:
         if progress_callback:
             progress_callback(90, "Running market simulation...")
-        results = sim.run(ticks=tick_src, max_ticks=max_ticks, log=True)
+        results = sim.run(ticks=tick_src, max_ticks=60, log=True)
         if progress_callback:
             progress_callback(95, "Calculating final results...")
     except KeyboardInterrupt:

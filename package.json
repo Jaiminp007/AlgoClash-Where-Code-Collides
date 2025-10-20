@@ -1,7 +1,4 @@
 {
-  "engines": {
-    "node": "20.x"
-  },
   "dependencies": {
     "flask": "^0.2.10"
   }
