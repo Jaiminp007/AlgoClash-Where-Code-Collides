@@ -20,6 +20,10 @@ except Exception:
 app = Flask(__name__)
 CORS(app)
 
+# Register algorithm preview/management blueprint
+from api.algos import algos_bp
+app.register_blueprint(algos_bp)
+
 # Health check
 @app.get("/api/health")
 def health():
