@@ -135,6 +135,11 @@ def run_simulation_background(sim_id, agents, stock_file):
                         _tag, model, code = parts
                         running_simulations[sim_id]["preview_model"] = model
                         running_simulations[sim_id]["code_preview"] = code
+                elif isinstance(message, str) and (message.startswith("MODEL_OK::") or message.startswith("MODEL_FAIL::") or message.startswith("MODEL_SKIP::")):
+                    # Forward per-model event logs for UI
+                    # Format: TAG::model::reason
+                    logs = running_simulations[sim_id].setdefault("model_logs", [])
+                    logs.append(message)
                 else:
                     running_simulations[sim_id]["message"] = message
                 running_simulations[sim_id]["progress"] = progress

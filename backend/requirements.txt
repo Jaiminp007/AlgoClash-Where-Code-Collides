@@ -10,6 +10,7 @@ matplotlib
 
 # HTTP requests for OpenRouter API
 requests
+httpx[http2]
 gunicorn
 # Environment variables
 python-dotenv

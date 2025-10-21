@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 import time
 import hashlib
 import random
+import asyncio
+import httpx
+from typing import Optional, List, Tuple
 
 # Import the main function from your model fetching script
 from model_fecthing import get_models_to_use
@@ -22,6 +25,9 @@ except Exception:
 # --- 1. Configuration ---
 API_KEY = os.getenv('OPENROUTER_API_KEY')
 CHAT_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODELS_API_URL = "https://openrouter.ai/api/v1/models"
+OPENROUTER_SITE_URL = os.getenv("OPENROUTER_SITE_URL", "http://localhost")
+OPENROUTER_APP_NAME = os.getenv("OPENROUTER_APP_NAME", "ai-trader-battlefield")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'generate_algo')
 
 # Data directory for local CSVs
@@ -130,16 +136,21 @@ def _save_code_for_model(code: str, model_name: str):
     save_algorithm_to_file(code, safe_name)
 
 
-def generate_algorithms_for_agents(selected_agents, ticker, progress_callback=None):
-    """Generate algorithms for specific agents via API only (no local fallbacks).
-    Returns True only if all agents produced valid code containing execute_trade.
+async def _generate_algorithms_for_agents_async(
+    selected_agents: List[str],
+    ticker: str,
+    progress_callback=None
+) -> bool:
+    """
+    Async implementation: Generate algorithms for specific agents concurrently.
+    Returns True if at least one agent produced valid code containing execute_trade.
     """
     total = len(selected_agents or [])
-    print(f"[gen] Generating algorithms for {total} agents using {ticker} data")
+    print(f"[gen] Generating algorithms for {total} agents using {ticker} data (ASYNC)")
     print(f"[ok] Using {total} models selected from frontend")
 
     if not selected_agents:
-        print("\u274c No models provided for generation")
+        print("❌ No models provided for generation")
         if progress_callback:
             progress_callback(35, "No models provided for generation")
         return False
@@ -152,52 +163,159 @@ def generate_algorithms_for_agents(selected_agents, ticker, progress_callback=No
     api_available = bool(API_KEY)
     if not api_available:
         msg = "OPENROUTER_API_KEY not found. Cannot generate algorithms."
-        print(f"\u274c {msg}")
+        print(f"❌ {msg}")
         if progress_callback:
             progress_callback(40, msg)
         return False
 
-    failures = []
-    saved = 0
-    for i, agent_model in enumerate(selected_agents):
-        try:
-            step_prog = 30 + int((i / max(1, total)) * 25)  # distribute 30-55%
-            if progress_callback:
-                progress_callback(step_prog, f"Generating algorithm {i+1}/{total} using {agent_model}...")
-            print(f"\nGenerating algorithm {i+1}/{total} using {agent_model}...")
+    # Preflight: fetch accessible models and normalize IDs to avoid attempting gated models
+    accessible = _get_accessible_models()
+    if accessible is None:
+        warn_msg = "Could not query accessible models from OpenRouter; proceeding without prefilter. Some models may be unavailable."
+        print(f"⚠️ {warn_msg}")
+        if progress_callback:
+            progress_callback(42, warn_msg)
+        accessible = set()
+    normalized_accessible = _normalize_model_id_set(accessible)
 
-            code = None
-            per_model_prompt = base_prompt + build_diversity_directives(agent_model)
-            code = generate_algorithm(agent_model, per_model_prompt)
-            # Require a proper execute_trade from the model
-            if not code or 'def execute_trade' not in code:
-                print(f"[error] Missing valid execute_trade in response for {agent_model}")
-                failures.append(agent_model)
-                continue
+    # Remap selected agents to accessible IDs when possible (toggle :free suffix as needed)
+    remapped_agents = []
+    filtered_out = []
+    for m in selected_agents:
+        mm = _pick_best_accessible_id(m, normalized_accessible)
+        if mm is None and normalized_accessible:
+            filtered_out.append(m)
+        else:
+            remapped_agents.append(mm or m)
 
-            # Emit a short preview snippet to the API progress stream for UX
-            if progress_callback and code:
+    if filtered_out:
+        msg = (
+            f"Skipping {len(filtered_out)} unavailable model(s): "
+            + ", ".join(filtered_out)
+        )
+        print(f"⚠️ {msg}")
+        if progress_callback:
+            progress_callback(45, msg)
+            # Emit per-model skip events for UI
+            for m in filtered_out:
                 try:
-                    snippet_lines = code.splitlines()[:24]
-                    preview = "\n".join(snippet_lines)
-                    progress_callback(step_prog, f"PREVIEW::{agent_model}::{preview}")
+                    progress_callback(45, f"MODEL_SKIP::{m}::unavailable")
                 except Exception:
                     pass
 
+    # If all models filtered, fail early
+    if not remapped_agents:
+        msg = "No accessible models available with current API key."
+        print(f"❌ {msg}")
+        if progress_callback:
+            progress_callback(48, msg)
+        return False
+
+    # Update total after filtering
+    total = len(remapped_agents)
+
+    # Create httpx async client with connection pooling
+    timeout = httpx.Timeout(60.0, connect=10.0)
+    limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
+
+    async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
+        # Create tasks for all agents with their original index to preserve order
+        async def generate_with_index(index: int, agent_model: str) -> Tuple[int, str, Optional[str]]:
+            """Generate algorithm and return (index, model_id, code) to preserve order."""
+            try:
+                step_prog = 30 + int((index / max(1, total)) * 25)  # distribute 30-55%
+                if progress_callback:
+                    progress_callback(step_prog, f"Generating algorithm {index+1}/{total} using {agent_model}...")
+                print(f"\nGenerating algorithm {index+1}/{total} using {agent_model}...")
+
+                per_model_prompt = base_prompt + build_diversity_directives(agent_model)
+                code = await generate_algorithm_async(client, agent_model, per_model_prompt)
+
+                # Require a proper execute_trade from the model
+                if not code or 'def execute_trade' not in code:
+                    print(f"[error] Missing valid execute_trade in response for {agent_model}")
+                    if progress_callback:
+                        try:
+                            progress_callback(step_prog, f"MODEL_FAIL::{agent_model}::missing_execute_trade")
+                        except Exception:
+                            pass
+                    return (index, agent_model, None)
+
+                # Emit a short preview snippet to the API progress stream for UX
+                if progress_callback and code:
+                    try:
+                        snippet_lines = code.splitlines()[:24]
+                        preview = "\n".join(snippet_lines)
+                        progress_callback(step_prog, f"PREVIEW::{agent_model}::{preview}")
+                    except Exception:
+                        pass
+
+                if progress_callback:
+                    try:
+                        progress_callback(step_prog, f"MODEL_OK::{agent_model}::generated")
+                    except Exception:
+                        pass
+
+                return (index, agent_model, code)
+
+            except Exception as e:
+                print(f"[error] Error generating algorithm for {agent_model}: {e}")
+                if progress_callback:
+                    try:
+                        progress_callback(30, f"MODEL_FAIL::{agent_model}::{str(e)}")
+                    except Exception:
+                        pass
+                return (index, agent_model, None)
+
+        # Use semaphore to limit concurrent requests (max 6 as specified)
+        semaphore = asyncio.Semaphore(6)
+
+        async def generate_with_semaphore(index: int, agent_model: str):
+            async with semaphore:
+                return await generate_with_index(index, agent_model)
+
+        # Fire all requests concurrently
+        tasks = [
+            generate_with_semaphore(i, agent_model)
+            for i, agent_model in enumerate(remapped_agents)
+        ]
+
+        # Wait for all with overall timeout guard (60s per request * 6 + buffer)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=False),
+                timeout=400.0  # Overall timeout
+            )
+        except asyncio.TimeoutError:
+            print("❌ Overall timeout exceeded for algorithm generation")
+            if progress_callback:
+                progress_callback(55, "Algorithm generation timeout exceeded")
+            return False
+
+    # Process results in original order
+    failures = []
+    saved = 0
+
+    for index, agent_model, code in sorted(results, key=lambda x: x[0]):
+        if code:
             _save_code_for_model(code, agent_model)
             saved += 1
-        except Exception as e:
-            print(f"[error] Error generating algorithm for {agent_model}: {e}")
+            if progress_callback:
+                try:
+                    progress_callback(30 + int((index / max(1, total)) * 25), f"MODEL_OK::{agent_model}::saved")
+                except Exception:
+                    pass
+        else:
             failures.append(agent_model)
 
     # Only fail if NO algorithms were generated successfully
     if saved == 0:
         msg = "Algorithm generation completely failed - no valid algorithms generated"
-        print(f"\u274c {msg}")
+        print(f"❌ {msg}")
         if progress_callback:
             progress_callback(55, msg)
         return False
-    
+
     # Warn about failures but continue with successful ones
     if failures:
         msg = f"⚠️ Algorithm generation failed for {len(failures)} model(s): {', '.join(failures)}. Continuing with {saved} successful algorithms."
@@ -210,6 +328,18 @@ def generate_algorithms_for_agents(selected_agents, ticker, progress_callback=No
 
     print(f"\n[done] Algorithm generation completed for {ticker} ({saved}/{total} successful)")
     return True
+
+
+def generate_algorithms_for_agents(selected_agents, ticker, progress_callback=None):
+    """
+    Sync wrapper: Generate algorithms for specific agents via API only (no local fallbacks).
+    Returns True only if all agents produced valid code containing execute_trade.
+
+    This is a synchronous wrapper around the async implementation that preserves
+    the original function signature for backward compatibility.
+    """
+    # Run the async version in a new event loop
+    return asyncio.run(_generate_algorithms_for_agents_async(selected_agents, ticker, progress_callback))
 
 def select_stock_file() -> tuple:
     """Interactively ask the user to pick a stock CSV. Returns (ticker, filename, full_path)."""
@@ -444,33 +574,144 @@ Implementation notes:
 
 # --- 2. Core Algorithm Generation Functions ---
 
+async def generate_algorithm_async(
+    client: httpx.AsyncClient,
+    model_id: str,
+    prompt_text: str,
+    max_retries: int = 3
+) -> Optional[str]:
+    """
+    Async version: Sends the generation prompt to a specific model and returns its response.
+    Implements retry with exponential backoff + jitter for 429/5xx errors.
+    """
+    print(f"\n--- Generating algorithm with: {model_id} ---")
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": OPENROUTER_SITE_URL,
+        "X-Title": OPENROUTER_APP_NAME,
+    }
+    data = {"model": model_id, "messages": [{"role": "user", "content": prompt_text}]}
+
+    # Exponential backoff with jitter: 0.5s, 1s, 2s base + random jitter
+    for attempt in range(max_retries + 1):
+        try:
+            response = await client.post(
+                CHAT_API_URL,
+                headers=headers,
+                json=data,
+                timeout=60.0  # Per-request timeout
+            )
+
+            # Retry on rate limit or server errors
+            if response.status_code in (429, 500, 502, 503, 504):
+                if attempt < max_retries:
+                    # Exponential backoff: 0.5s * (2^attempt) + jitter
+                    base_delay = 0.5 * (2 ** attempt)
+                    jitter = random.uniform(0, 0.1 * base_delay)
+                    delay = base_delay + jitter
+                    print(f"⚠️ {model_id}: HTTP {response.status_code}, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    err_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    print(f"❌ FAILED after {max_retries} retries for {model_id}. Error: {err_msg}")
+                    return None
+
+            response.raise_for_status()
+            raw = response.json()['choices'][0]['message']['content']
+            content = _extract_execute_trade_code(raw)
+
+            if content and 'def execute_trade' in content:
+                print(f"✅ SUCCESS: Code received from {model_id}.")
+                return content.strip()
+            else:
+                print(f"❌ FAILED to find execute_trade in {model_id} output.")
+                return None
+
+        except httpx.TimeoutException as e:
+            if attempt < max_retries:
+                base_delay = 0.5 * (2 ** attempt)
+                jitter = random.uniform(0, 0.1 * base_delay)
+                delay = base_delay + jitter
+                print(f"⚠️ {model_id}: Timeout, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})")
+                await asyncio.sleep(delay)
+                continue
+            print(f"❌ FAILED to get code from {model_id}. Error: {e}")
+            return None
+
+        except httpx.HTTPStatusError as e:
+            print(f"❌ FAILED to get code from {model_id}. HTTP error: {e}")
+            return None
+
+        except (KeyError, IndexError) as e:
+            print(f"❌ FAILED to parse response from {model_id}: {e}")
+            return None
+
+        except Exception as e:
+            if attempt < max_retries:
+                base_delay = 0.5 * (2 ** attempt)
+                jitter = random.uniform(0, 0.1 * base_delay)
+                delay = base_delay + jitter
+                print(f"⚠️ {model_id}: Error {e}, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})")
+                await asyncio.sleep(delay)
+                continue
+            print(f"❌ FAILED to get code from {model_id}. Error: {e}")
+            return None
+
+    return None
+
+
 def generate_algorithm(model_id, prompt_text: str):
     """Sends the generation prompt to a specific model and returns its response."""
     print(f"\n--- Generating algorithm with: {model_id} ---")
-    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+        # Recommended by OpenRouter to help with access/rate limits attribution
+        "HTTP-Referer": OPENROUTER_SITE_URL,
+        "X-Title": OPENROUTER_APP_NAME,
+    }
     data = {"model": model_id, "messages": [{"role": "user", "content": prompt_text}]}
-    try:
-        response = requests.post(CHAT_API_URL, headers=headers, json=data, timeout=180)
-        response.raise_for_status()
-        content = response.json()['choices'][0]['message']['content'].strip()
-        
-        # Clean up code blocks
-        if content.startswith("```python"):
-            content = content[9:]
-        elif content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        
-        content = content.strip()
-        print(f"✅ SUCCESS: Code received from {model_id}.")
-        return content
-    except requests.exceptions.RequestException as e:
-        print(f"❌ FAILED to get code from {model_id}.\n   Error: {e}")
-        return None
-    except (KeyError, IndexError):
-        print(f"❌ FAILED to parse response from {model_id}.")
-        return None
+    # Retries for transient errors (429/5xx/timeouts)
+    backoffs = [1.0, 2.0, 3.0]
+    last_err = None
+    for attempt in range(len(backoffs) + 1):
+        try:
+            response = requests.post(CHAT_API_URL, headers=headers, json=data, timeout=180)
+            # If server returns explicit error codes, decide whether to retry
+            if response.status_code in (429, 500, 502, 503, 504):
+                last_err = f"HTTP {response.status_code}: {response.text[:200]}"
+                if attempt < len(backoffs):
+                    time.sleep(backoffs[attempt])
+                    continue
+                else:
+                    print(f"❌ FAILED after retries for {model_id}. Error: {last_err}")
+                    return None
+            response.raise_for_status()
+            raw = response.json()['choices'][0]['message']['content']
+            content = _extract_execute_trade_code(raw)
+            if content and 'def execute_trade' in content:
+                print(f"✅ SUCCESS: Code received from {model_id}.")
+                return content.strip()
+            else:
+                print(f"❌ FAILED to find execute_trade in {model_id} output.")
+                return None
+        except requests.exceptions.RequestException as e:
+            last_err = str(e)
+            if attempt < len(backoffs):
+                time.sleep(backoffs[attempt])
+                continue
+            err_txt = ""
+            try:
+                err_txt = f" | server: {response.text[:300]}" if 'response' in locals() and hasattr(response, 'text') else ""
+            except Exception:
+                err_txt = ""
+            print(f"❌ FAILED to get code from {model_id}. Error: {e}{err_txt}")
+            return None
+        except (KeyError, IndexError) as e:
+            print(f"❌ FAILED to parse response from {model_id}: {e}")
+            return None
 
 def save_algorithm_to_file(code, model_name):
     """Saves the generated code to a uniquely named file."""
@@ -527,3 +768,113 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- 4. OpenRouter model availability helpers ---
+
+def _normalize_model_id_set(model_ids: set[str]) -> set[str]:
+    """Return a set including both with/without ':free' variants for match convenience."""
+    out = set()
+    for mid in model_ids or []:
+        out.add(mid)
+        if mid.endswith(":free"):
+            out.add(mid[:-5])
+        else:
+            out.add(f"{mid}:free")
+    return out
+
+_CACHED_ACCESSIBLE: tuple[float, set[str]] | None = None
+
+def _get_accessible_models() -> set[str] | None:
+    """Query OpenRouter for models accessible to this API key. Cached for 60s."""
+    global _CACHED_ACCESSIBLE
+    now = time.time()
+    if _CACHED_ACCESSIBLE and (now - _CACHED_ACCESSIBLE[0] < 60):
+        return _CACHED_ACCESSIBLE[1]
+    if not API_KEY:
+        return None
+    try:
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "HTTP-Referer": OPENROUTER_SITE_URL,
+            "X-Title": OPENROUTER_APP_NAME,
+        }
+        r = requests.get(MODELS_API_URL, headers=headers, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        ids = set()
+        for m in data.get("data", []):
+            mid = m.get("id")
+            if isinstance(mid, str):
+                ids.add(mid)
+        _CACHED_ACCESSIBLE = (now, ids)
+        return ids
+    except Exception as e:
+        print(f"⚠️ Could not fetch accessible models list: {e}")
+        return None
+
+def _pick_best_accessible_id(selected_id: str, normalized_accessible: set[str]) -> str | None:
+    """Return an accessible variant of selected_id if available; else None if list is non-empty."""
+    if not normalized_accessible:
+        # If we couldn't fetch, don't filter
+        return selected_id
+    candidates = [selected_id]
+    # Try toggling ':free'
+    if selected_id.endswith(":free"):
+        candidates.append(selected_id[:-5])
+    else:
+        candidates.append(f"{selected_id}:free")
+    for cand in candidates:
+        if cand in normalized_accessible:
+            # Return the exact ID as present in accessible set if possible
+            # Normalize to one of the variants contained within the set
+            if cand in normalized_accessible:
+                return cand
+    return None
+
+def _extract_execute_trade_code(raw_content: str) -> str | None:
+    """Attempt to extract a clean Python function containing execute_trade from model output.
+    Handles content with markdown fences, extra prose, or multiple blocks.
+    """
+    if not isinstance(raw_content, str):
+        return None
+    text = raw_content.strip()
+
+    # 1) If there are fenced code blocks, search for one containing the function
+    blocks = []
+    try:
+        # Split by triple backticks while preserving content
+        parts = text.split("```")
+        for i in range(1, len(parts), 2):
+            lang_and_code = parts[i]
+            # Remove leading language tag like 'python\n'
+            if "\n" in lang_and_code:
+                first, rest = lang_and_code.split("\n", 1)
+                code = rest
+            else:
+                code = lang_and_code
+            blocks.append(code)
+    except Exception:
+        blocks = []
+
+    # Prefer a block with execute_trade
+    for b in blocks:
+        if 'def execute_trade' in b:
+            return b.strip()
+
+    # 2) If no blocks or no match, try to extract from raw text by finding the function definition
+    import re
+    m = re.search(r"(^|\n)def\s+execute_trade\s*\(.*?\):", text)
+    if m:
+        start = m.start(0) if m.start(0) >= 0 else 0
+        snippet = text[start:]
+        # crude but effective: stop at next unindented def/class or end
+        lines = snippet.splitlines()
+        out = []
+        for ln in lines:
+            out.append(ln)
+            if re.match(r"^[^\s]", ln) and ln.startswith(('def ', 'class ')) and len(out) > 1:
+                break
+        return "\n".join(out).strip()
+
+    # 3) Fallback: if text itself is code and includes imports but forgot the function name, return text
+    return text if 'def execute_trade' in text else None
