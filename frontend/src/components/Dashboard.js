@@ -29,6 +29,9 @@ const Dashboard = () => {
   const [codePreviewModel, setCodePreviewModel] = useState('');
   const lastPreviewModelRef = useRef('');
   const [showAlgoPreview, setShowAlgoPreview] = useState(false);
+  const [generationPhase, setGenerationPhase] = useState('idle'); // 'idle', 'generating', 'review', 'simulating', 'completed'
+  const [generatedAlgos, setGeneratedAlgos] = useState([]);
+  const [currentSimId, setCurrentSimId] = useState(null);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -90,15 +93,17 @@ const Dashboard = () => {
 
     setIsRunning(true);
     setSimulationResults(null);
-    setSimulationStatus('Starting simulation...');
-  setShowInstructions(false);
-  setProgress(0);
-  // Initialize per-agent generation states
-  const uniqueAgents = Array.from(new Set(agents));
-  const initStates = {};
-  uniqueAgents.forEach(name => { initStates[name] = 'pending'; });
-  setGenStates(initStates);
-  lastGeneratingRef.current = null;
+    setSimulationStatus('Starting algorithm generation...');
+    setShowInstructions(false);
+    setProgress(0);
+    setGenerationPhase('generating');
+
+    // Initialize per-agent generation states
+    const uniqueAgents = Array.from(new Set(agents));
+    const initStates = {};
+    uniqueAgents.forEach(name => { initStates[name] = 'pending'; });
+    setGenStates(initStates);
+    lastGeneratingRef.current = null;
 
     try {
       const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -114,12 +119,13 @@ const Dashboard = () => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         const simId = data.simulation_id;
-        setSimulationStatus('Simulation running...');
-        
-        // Poll for results
+        setCurrentSimId(simId);
+        setSimulationStatus('Generating algorithms...');
+
+        // Poll for generation completion
         pollSimulationStatus(simId);
       } else {
         throw new Error(data.error || 'Failed to start simulation');
@@ -128,7 +134,23 @@ const Dashboard = () => {
       console.error('Simulation error:', error);
       setSimulationStatus(`Error: ${error.message}`);
       setIsRunning(false);
+      setGenerationPhase('idle');
     }
+  };
+
+  const handleStartMarketSimulation = async () => {
+    if (!currentSimId) return;
+
+    setGenerationPhase('simulating');
+    setSimulationStatus('Starting market simulation...');
+    setProgress(50);
+
+    // Continue polling - backend continues with market simulation
+    // Note: Backend doesn't have separate pause/resume, so we just resume polling
+    // The backend actually runs the full simulation automatically.
+    // This checkpoint is purely for frontend UX to let users review algorithms.
+    // We'll resume polling and the backend simulation should already be running
+    setTimeout(() => pollSimulationStatus(currentSimId), 1000);
   };
 
   const pollSimulationStatus = async (simId) => {
@@ -142,15 +164,18 @@ const Dashboard = () => {
         setSimulationStatus('Simulation completed!');
         setIsRunning(false);
         setProgress(100);
+        setGenerationPhase('completed');
         // keep last preview visible until user navigates back
       } else if (data.status === 'error') {
         setSimulationStatus(`Error: ${data.error}`);
         setIsRunning(false);
+        setGenerationPhase('idle');
       } else {
         const pct = typeof data.progress === 'number' ? data.progress : 0;
         const message = data.message || `Running... ${pct}%`;
         setSimulationStatus(message);
         setProgress(pct);
+
         if (data.code_preview) {
           const incomingModel = String(data.preview_model || '');
           const incomingCode = String(data.code_preview);
@@ -161,15 +186,43 @@ const Dashboard = () => {
             lastPreviewModelRef.current = incomingModel;
           }
         }
+
         // Parse and reflect generation progress per model if present
         parseProgressMessage(message);
-        // Continue polling
-        setTimeout(() => pollSimulationStatus(simId), 2000);
+
+        // Check if all algorithms are generated (transition to review phase)
+        if (message.includes('All algorithms generated successfully') && generationPhase === 'generating') {
+          setGenerationPhase('review');
+          setProgress(50);
+          // Fetch generated algorithms list
+          fetchGeneratedAlgorithms();
+          // Don't continue polling - wait for user to click "Start Market Simulation"
+          return;
+        }
+
+        // Only continue polling if not in review phase
+        if (generationPhase !== 'review') {
+          setTimeout(() => pollSimulationStatus(simId), 2000);
+        }
       }
     } catch (error) {
       console.error('Polling error:', error);
       setSimulationStatus(`Polling error: ${error.message}`);
       setIsRunning(false);
+      setGenerationPhase('idle');
+    }
+  };
+
+  const fetchGeneratedAlgorithms = async () => {
+    try {
+      const apiBase = process.env.REACT_APP_API_BASE_URL || '';
+      const response = await fetch(`${apiBase}/api/algos`);
+      if (response.ok) {
+        const algos = await response.json();
+        setGeneratedAlgos(algos);
+      }
+    } catch (error) {
+      console.error('Error fetching algorithms:', error);
     }
   };
 
@@ -180,12 +233,22 @@ const Dashboard = () => {
     const genMatch = message.match(/Generating algorithm\s+(\d+)\/(\d+)\s+using\s+(.+?)\.\.\./i);
     if (genMatch) {
       const model = genMatch[3];
-      const prev = lastGeneratingRef.current;
-      if (prev && prev !== model) {
-        setGenStates(prevState => ({ ...prevState, [prev]: 'done' }));
-      }
+      const current = parseInt(genMatch[1]);
+      const total = parseInt(genMatch[2]);
+
+      // Mark this model as generating
+      setGenStates(prevState => {
+        const newState = { ...prevState };
+        // Mark previous models as done
+        Object.keys(newState).forEach(key => {
+          if (key !== model && newState[key] === 'generating') {
+            newState[key] = 'done';
+          }
+        });
+        newState[model] = 'generating';
+        return newState;
+      });
       lastGeneratingRef.current = model;
-      setGenStates(prevState => ({ ...prevState, [model]: 'generating' }));
       return;
     }
     // Mark all done after generation complete message
@@ -213,6 +276,9 @@ const Dashboard = () => {
     setGenStates({});
     lastGeneratingRef.current = null;
     setShowInstructions(true);
+    setGenerationPhase('idle');
+    setGeneratedAlgos([]);
+    setCurrentSimId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -223,13 +289,6 @@ const Dashboard = () => {
         <h1 className="dashboard-title">
           AlgoClash: <span className="subtitle">Where Code Collides</span>
         </h1>
-        <button
-          className="preview-algos-button"
-          onClick={() => setShowAlgoPreview(true)}
-          title="View and manage generated algorithms"
-        >
-          📄 Preview Algorithms
-        </button>
         <nav className="dashboard-nav">
           <a
             href="#home"
@@ -274,27 +333,37 @@ const Dashboard = () => {
         </nav>
       </header>
 
-      {/* Top controls below navbar: Stock selector */}
+      {/* Top controls below navbar: Preview button and Stock selector */}
       <div className="top-controls">
-        <label htmlFor="stock-select">Stock data:</label>
-        {stocks.length > 0 ? (
-          <select
-            id="stock-select"
-            className="stock-select"
-            value={selectedStock}
-            onChange={(e) => setSelectedStock(e.target.value)}
-          >
-            {stocks.map((item) => {
-              const ticker = item.ticker || String(item).replace(/_data\.csv$/i, '').toUpperCase();
-              const filename = item.filename || String(item);
-              return (
-                <option key={filename} value={filename}>{ticker}</option>
-              );
-            })}
-          </select>
-        ) : (
-          <span className="stock-empty">No data files found</span>
-        )}
+        <button
+          className="preview-algos-button"
+          onClick={() => setShowAlgoPreview(true)}
+          title="View and manage generated algorithms"
+        >
+          📄 Preview Algorithms
+        </button>
+
+        <div className="stock-selector-group">
+          <label htmlFor="stock-select">Stock data:</label>
+          {stocks.length > 0 ? (
+            <select
+              id="stock-select"
+              className="stock-select"
+              value={selectedStock}
+              onChange={(e) => setSelectedStock(e.target.value)}
+            >
+              {stocks.map((item) => {
+                const ticker = item.ticker || String(item).replace(/_data\.csv$/i, '').toUpperCase();
+                const filename = item.filename || String(item);
+                return (
+                  <option key={filename} value={filename}>{ticker}</option>
+                );
+              })}
+            </select>
+          ) : (
+            <span className="stock-empty">No data files found</span>
+          )}
+        </div>
       </div>
 
   {/* Main Content Area */}
@@ -333,7 +402,8 @@ const Dashboard = () => {
       
         {/* Center Blue Box with conditional content */}
         <div className="center-box">
-          {showInstructions && !isRunning ? (
+          {/* Idle/Instructions State */}
+          {generationPhase === 'idle' && !isRunning ? (
             <div className="instructions">
               <h2>How the Battle Works</h2>
               <p>
@@ -343,18 +413,11 @@ const Dashboard = () => {
 
               <h3>What you do</h3>
               <ol>
-                <li>
-                  Choose a stock dataset from the dropdown at the top right (e.g., AAPL, MSFT).
-                </li>
-                <li>
-                  Pick exactly six unique AI models using the left and right selectors (3 vs 3).
-                </li>
-                <li>
-                  Click <strong>START</strong> to generate strategies and run a ~60‑tick market battle.
-                </li>
-                <li>
-                  Watch the status at the bottom; when finished, view the winner and leaderboard.
-                </li>
+                <li>Choose a stock dataset from the dropdown at the top (e.g., AAPL, MSFT).</li>
+                <li>Pick exactly six unique AI models using the left and right selectors (3 vs 3).</li>
+                <li>Click <strong>START</strong> to generate trading algorithms.</li>
+                <li>Review the generated algorithms and start the market simulation.</li>
+                <li>Watch the battle unfold and see which strategy wins!</li>
               </ol>
 
               <div className="tips">
@@ -362,45 +425,95 @@ const Dashboard = () => {
                 <ul>
                   <li>All agents must be selected before starting.</li>
                   <li>Mix models from different providers for diverse tactics.</li>
-                  <li>Internet is required for market data and model generation.</li>
+                  <li>You can preview and review algorithms before the battle starts.</li>
                 </ul>
               </div>
             </div>
-          ) : (
+          ) : generationPhase === 'generating' ? (
+            /* Algorithm Generation Phase */
             <div className="progress-panel">
-              <h2>Simulation Status</h2>
+              <h2>🔧 Generating Trading Algorithms</h2>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
               </div>
-              <div className="current-task">{currentTask || simulationStatus || 'Preparing...'}</div>
+              <div className="current-task">{currentTask || 'Generating algorithms...'}</div>
 
-              {/* Per-agent generation states */}
+              {/* Active generation status */}
               <div className="gen-list">
                 {Object.keys(genStates).length > 0 ? (
                   Object.entries(genStates).map(([name, state]) => (
                     <div key={name} className={`gen-item ${state}`}>
-                      <span className={`status ${state}`}>
-                        {state === 'done' ? '✔' : state === 'generating' ? '⏳' : '•'}
+                      <span className={`status-icon ${state}`}>
+                        {state === 'done' ? '✅' : state === 'generating' ? '⏳' : '⏸️'}
                       </span>
                       <span className="model-name">{name}</span>
+                      {state === 'generating' && <span className="generating-label">Generating...</span>}
                     </div>
                   ))
                 ) : (
-                  <div className="gen-empty">Waiting for algorithm generation…</div>
+                  <div className="gen-empty">Preparing algorithm generation…</div>
                 )}
               </div>
 
               {/* Live code preview during generation */}
-              {codePreview && (
+              {codePreview && generationPhase === 'generating' && (
                 <div className="code-preview">
                   <div className="code-preview-header">
-                    Preview {codePreviewModel ? `from ${codePreviewModel}` : ''}
+                    Live Preview: {codePreviewModel || 'Algorithm'}
                   </div>
                   <pre><code>{codePreview}</code></pre>
                 </div>
               )}
             </div>
-          )}
+          ) : generationPhase === 'review' ? (
+            /* Review & Checkpoint Phase */
+            <div className="review-panel">
+              <h2>✅ Algorithms Generated Successfully!</h2>
+              <p className="review-subtitle">
+                All {generatedAlgos.length} trading algorithms have been generated. Review them below and start the market simulation when ready.
+              </p>
+
+              <div className="generated-algos-list">
+                {generatedAlgos.map((algo, idx) => (
+                  <div key={algo.filename} className="algo-card">
+                    <div className="algo-info">
+                      <span className="algo-number">#{idx + 1}</span>
+                      <span className="algo-model">{algo.modelName}</span>
+                      <span className="algo-size">{(algo.sizeBytes / 1024).toFixed(1)} KB</span>
+                    </div>
+                    <button
+                      className="preview-btn"
+                      onClick={() => {
+                        setShowAlgoPreview(true);
+                      }}
+                    >
+                      👁️ View
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                className="start-market-sim-button"
+                onClick={handleStartMarketSimulation}
+              >
+                🚀 Start Market Simulation
+              </button>
+
+              <button className="back-button-review" onClick={handleBack}>
+                ← Back
+              </button>
+            </div>
+          ) : generationPhase === 'simulating' || generationPhase === 'completed' ? (
+            /* Market Simulation Phase */
+            <div className="progress-panel">
+              <h2>📈 Market Simulation Running</h2>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+              </div>
+              <div className="current-task">{currentTask || simulationStatus || 'Running market simulation...'}</div>
+            </div>
+          ) : null}
         </div>
 
 
