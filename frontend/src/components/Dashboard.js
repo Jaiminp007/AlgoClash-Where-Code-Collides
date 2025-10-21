@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import CustomDropdown from './CustomDropdown'; // Import the new component
 import AlgorithmPreviewModal from './AlgorithmPreviewModal';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [navOpen, setNavOpen] = useState(false);
   const [active, setActive] = useState('home');
   const [agents, setAgents] = useState({});
@@ -90,19 +92,19 @@ const Dashboard = () => {
 
     setIsRunning(true);
     setSimulationResults(null);
-    setSimulationStatus('Starting simulation...');
-  setShowInstructions(false);
-  setProgress(0);
-  // Initialize per-agent generation states
-  const uniqueAgents = Array.from(new Set(agents));
-  const initStates = {};
-  uniqueAgents.forEach(name => { initStates[name] = 'pending'; });
-  setGenStates(initStates);
-  lastGeneratingRef.current = null;
+    setSimulationStatus('Generating algorithms...');
+    setShowInstructions(false);
+    setProgress(0);
+    // Initialize per-agent generation states
+    const uniqueAgents = Array.from(new Set(agents));
+    const initStates = {};
+    uniqueAgents.forEach(name => { initStates[name] = 'pending'; });
+    setGenStates(initStates);
+    lastGeneratingRef.current = null;
 
     try {
       const apiBase = process.env.REACT_APP_API_BASE_URL || '';
-      const response = await fetch(`${apiBase}/api/run`, {
+      const response = await fetch(`${apiBase}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,18 +116,24 @@ const Dashboard = () => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
-        const simId = data.simulation_id;
-        setSimulationStatus('Simulation running...');
-        
-        // Poll for results
-        pollSimulationStatus(simId);
+        const genId = data.generation_id;
+        setSimulationStatus('Algorithms generating...');
+
+        // Navigate to review screen
+        navigate('/review', {
+          state: {
+            generationId: genId,
+            selectedAgents: agents,
+            selectedStock: selectedStock
+          }
+        });
       } else {
-        throw new Error(data.error || 'Failed to start simulation');
+        throw new Error(data.error || 'Failed to start generation');
       }
     } catch (error) {
-      console.error('Simulation error:', error);
+      console.error('Generation error:', error);
       setSimulationStatus(`Error: ${error.message}`);
       setIsRunning(false);
     }
@@ -350,10 +358,13 @@ const Dashboard = () => {
                   Pick exactly six unique AI models using the left and right selectors (3 vs 3).
                 </li>
                 <li>
-                  Click <strong>START</strong> to generate strategies and run a ~60‑tick market battle.
+                  Click <strong>GENERATE ALGORITHMS</strong> to create unique trading strategies for each AI.
                 </li>
                 <li>
-                  Watch the status at the bottom; when finished, view the winner and leaderboard.
+                  Review all generated algorithms, then click <strong>START SIMULATION</strong> to run the market battle.
+                </li>
+                <li>
+                  Watch the winner and leaderboard after the simulation completes.
                 </li>
               </ol>
 
@@ -405,12 +416,12 @@ const Dashboard = () => {
 
 
         {/* Start Button */}
-        <button 
+        <button
           className={`start-button ${isRunning ? 'running' : ''}`}
           onClick={handleStartSimulation}
           disabled={isRunning}
         >
-          {isRunning ? 'RUNNING...' : 'START'}
+          {isRunning ? 'GENERATING...' : 'GENERATE ALGORITHMS'}
         </button>
 
         {/* Simulation Status */}
