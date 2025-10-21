@@ -102,6 +102,29 @@ python main.py            # Run complete simulation
    echo "OPENROUTER_API_KEY=your_key_here" > .env
    ```
 
+### OpenRouter access notes
+- Some provider models (e.g., Google Gemini Pro, Anthropic Sonnet/Opus, DeepSeek R1 variants) are gated per API key. If your key doesn't have access, those models will not work.
+- We now preflight your accessible models via the OpenRouter Models API and automatically skip unavailable ones instead of failing the run.
+- Keep model IDs exact. Do not remove the suffix when present:
+    - Correct: `meta-llama/llama-4-maverick:free`
+    - Incorrect: `meta-llama/llama-4-maverick`
+- Recommended environment variables for better compatibility and rate-limit attribution:
+    ```bash
+    echo "OPENROUTER_SITE_URL=http://localhost" >> .env
+    echo "OPENROUTER_APP_NAME=ai-trader-battlefield" >> .env
+    ```
+    These are sent as `HTTP-Referer` and `X-Title` headers to OpenRouter.
+
+### Why some models may be unavailable
+- Your API key lacks access to that model/provider.
+- The model is region-restricted or temporarily paused on OpenRouter.
+- The model ID is incorrect (e.g., missing `:free` or a typo).
+
+The backend now:
+- Queries `/api/v1/models` and maps selected IDs to accessible variants (with/without `:free`).
+- Skips inaccessible models with clear messages in the simulation status.
+- Improves error logs with server response snippets for easier debugging.
+
 ## 🎯 Usage Examples
 
 ### Basic Market Simulation
@@ -228,6 +251,8 @@ pip install yfinance
 
 **2. No generated algorithms found**
 - Ensure OpenRouter API key is configured in `.env`
+- Add `OPENROUTER_SITE_URL` and `OPENROUTER_APP_NAME` for better compatibility
+- Some selected models may be inaccessible; check logs for: `Skipping N unavailable model(s)`
 - Run algorithm generation: `python -c "from open_router.algo_gen import main; main()"`
 
 **3. Chart display fails**
