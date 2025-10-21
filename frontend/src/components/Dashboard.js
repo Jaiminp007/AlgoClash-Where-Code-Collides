@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './Dashboard.css';
 import CustomDropdown from './CustomDropdown'; // Import the new component
+import AlgorithmPreviewModal from './AlgorithmPreviewModal';
 
 const Dashboard = () => {
   const [navOpen, setNavOpen] = useState(false);
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const [codePreview, setCodePreview] = useState('');
   const [codePreviewModel, setCodePreviewModel] = useState('');
   const lastPreviewModelRef = useRef('');
+  const [showAlgoPreview, setShowAlgoPreview] = useState(false);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -221,6 +223,13 @@ const Dashboard = () => {
         <h1 className="dashboard-title">
           AlgoClash: <span className="subtitle">Where Code Collides</span>
         </h1>
+        <button
+          className="preview-algos-button"
+          onClick={() => setShowAlgoPreview(true)}
+          title="View and manage generated algorithms"
+        >
+          📄 Preview Algorithms
+        </button>
         <nav className="dashboard-nav">
           <a
             href="#home"
@@ -442,6 +451,12 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Algorithm Preview Modal */}
+      <AlgorithmPreviewModal
+        isOpen={showAlgoPreview}
+        onClose={() => setShowAlgoPreview(false)}
+      />
     </div>
   );
 };

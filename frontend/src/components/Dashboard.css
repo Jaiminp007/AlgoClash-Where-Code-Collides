@@ -36,6 +36,34 @@
   text-align: left; /* Align subtitle to the left */
 }
 
+/* Preview Algorithms button */
+.preview-algos-button {
+  background: linear-gradient(135deg, #003566, #001d3d);
+  color: #FFD60A;
+  border: 1px solid #FFD60A;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: 40px;
+  box-shadow: 0 0 15px rgba(255, 195, 0, 0.2);
+}
+
+.preview-algos-button:hover {
+  background: linear-gradient(135deg, #FFD60A, #FFC300);
+  color: #001d3d;
+  border-color: #FFC300;
+  box-shadow: 0 0 25px rgba(255, 195, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+.preview-algos-button:active {
+  transform: translateY(0);
+}
+
 .dashboard-nav {
   display: flex;
   gap: 2rem;
