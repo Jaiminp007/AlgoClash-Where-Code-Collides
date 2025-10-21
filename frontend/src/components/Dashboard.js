@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import CustomDropdown from './CustomDropdown'; // Import the new component
 import AlgorithmPreviewModal from './AlgorithmPreviewModal';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [navOpen, setNavOpen] = useState(false);
   const [active, setActive] = useState('home');
   const [agents, setAgents] = useState({});
@@ -93,11 +95,9 @@ const Dashboard = () => {
 
     setIsRunning(true);
     setSimulationResults(null);
-    setSimulationStatus('Starting algorithm generation...');
+    setSimulationStatus('Generating algorithms...');
     setShowInstructions(false);
     setProgress(0);
-    setGenerationPhase('generating');
-
     // Initialize per-agent generation states
     const uniqueAgents = Array.from(new Set(agents));
     const initStates = {};
@@ -107,7 +107,7 @@ const Dashboard = () => {
 
     try {
       const apiBase = process.env.REACT_APP_API_BASE_URL || '';
-      const response = await fetch(`${apiBase}/api/run`, {
+      const response = await fetch(`${apiBase}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,17 +121,22 @@ const Dashboard = () => {
       const data = await response.json();
 
       if (response.ok) {
-        const simId = data.simulation_id;
-        setCurrentSimId(simId);
-        setSimulationStatus('Generating algorithms...');
+        const genId = data.generation_id;
+        setSimulationStatus('Algorithms generating...');
 
-        // Poll for generation completion
-        pollSimulationStatus(simId);
+        // Navigate to review screen
+        navigate('/review', {
+          state: {
+            generationId: genId,
+            selectedAgents: agents,
+            selectedStock: selectedStock
+          }
+        });
       } else {
-        throw new Error(data.error || 'Failed to start simulation');
+        throw new Error(data.error || 'Failed to start generation');
       }
     } catch (error) {
-      console.error('Simulation error:', error);
+      console.error('Generation error:', error);
       setSimulationStatus(`Error: ${error.message}`);
       setIsRunning(false);
       setGenerationPhase('idle');
@@ -413,11 +418,21 @@ const Dashboard = () => {
 
               <h3>What you do</h3>
               <ol>
-                <li>Choose a stock dataset from the dropdown at the top (e.g., AAPL, MSFT).</li>
-                <li>Pick exactly six unique AI models using the left and right selectors (3 vs 3).</li>
-                <li>Click <strong>START</strong> to generate trading algorithms.</li>
-                <li>Review the generated algorithms and start the market simulation.</li>
-                <li>Watch the battle unfold and see which strategy wins!</li>
+                <li>
+                  Choose a stock dataset from the dropdown at the top right (e.g., AAPL, MSFT).
+                </li>
+                <li>
+                  Pick exactly six unique AI models using the left and right selectors (3 vs 3).
+                </li>
+                <li>
+                  Click <strong>GENERATE ALGORITHMS</strong> to create unique trading strategies for each AI.
+                </li>
+                <li>
+                  Review all generated algorithms, then click <strong>START SIMULATION</strong> to run the market battle.
+                </li>
+                <li>
+                  Watch the winner and leaderboard after the simulation completes.
+                </li>
               </ol>
 
               <div className="tips">
@@ -518,12 +533,12 @@ const Dashboard = () => {
 
 
         {/* Start Button */}
-        <button 
+        <button
           className={`start-button ${isRunning ? 'running' : ''}`}
           onClick={handleStartSimulation}
           disabled={isRunning}
         >
-          {isRunning ? 'RUNNING...' : 'START'}
+          {isRunning ? 'GENERATING...' : 'GENERATE ALGORITHMS'}
         </button>
 
         {/* Simulation Status */}
