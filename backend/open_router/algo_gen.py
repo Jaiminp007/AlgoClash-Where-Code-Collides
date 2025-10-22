@@ -10,7 +10,8 @@ import httpx
 from typing import Optional, List, Tuple
 
 # Import the main function from your model fetching script
-from model_fecthing import get_models_to_use
+# Use relative import so this works when imported as part of the package (open_router)
+from .model_fecthing import get_models_to_use
 # Load environment variables from a .env file (explicit backend path for reliability)
 try:
     # First, try default discovery (current CWD and parents)
@@ -225,7 +226,16 @@ async def _generate_algorithms_for_agents_async(
             try:
                 step_prog = 30 + int((index / max(1, total)) * 25)  # distribute 30-55%
                 if progress_callback:
-                    progress_callback(step_prog, f"Generating algorithm {index+1}/{total} using {agent_model}...")
+                    # Emit a per-model start event so UI can mark it as actively generating (supports concurrency)
+                    try:
+                        progress_callback(step_prog, f"MODEL_START::{agent_model}")
+                    except Exception:
+                        pass
+                    # Retain the existing human-readable message for backwards compatibility
+                    try:
+                        progress_callback(step_prog, f"Generating algorithm {index+1}/{total} using {agent_model}...")
+                    except Exception:
+                        pass
                 print(f"\nGenerating algorithm {index+1}/{total} using {agent_model}...")
 
                 per_model_prompt = base_prompt + build_diversity_directives(agent_model)

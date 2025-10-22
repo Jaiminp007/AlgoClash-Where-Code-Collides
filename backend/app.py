@@ -219,18 +219,47 @@ def run_generation_background(gen_id, agents, stock_file):
         running_generations[gen_id]["progress"] = 20
         running_generations[gen_id]["message"] = f"Generating algorithms for {ticker}..."
 
-        # Progress callback to store algorithm code
+        # Progress callback to store algorithm code and per-model states
         def progress_callback(progress, message):
             try:
+                state = running_generations[gen_id]
+                # Initialize collections if missing
+                model_logs = state.setdefault("model_logs", [])
+                model_states = state.setdefault("model_states", {})
+
                 if isinstance(message, str) and message.startswith("PREVIEW::"):
                     parts = message.split("::", 2)
                     if len(parts) == 3:
                         _tag, model, code = parts
-                        running_generations[gen_id]["algorithms"][model] = code
-                        running_generations[gen_id]["message"] = f"Generated algorithm for {model}"
+                        state["algorithms"][model] = code
+                        state["message"] = f"Generated algorithm for {model}"
+                elif isinstance(message, str) and (
+                    message.startswith("MODEL_OK::") or 
+                    message.startswith("MODEL_FAIL::") or 
+                    message.startswith("MODEL_SKIP::") or 
+                    message.startswith("MODEL_START::")
+                ):
+                    # Track per-model lifecycle events
+                    model_logs.append(message)
+                    try:
+                        tag, model, *rest = message.split("::", 2)
+                    except Exception:
+                        tag, model = message, ""
+                    # Normalize states for UI
+                    if message.startswith("MODEL_START::"):
+                        model_states[model] = "generating"
+                    elif message.startswith("MODEL_OK::"):
+                        model_states[model] = "done"
+                    elif message.startswith("MODEL_FAIL::"):
+                        model_states[model] = "error"
+                    elif message.startswith("MODEL_SKIP::"):
+                        model_states[model] = "skipped"
+                    # Do not overwrite human-readable message unless none provided
+                    state.setdefault("message", message)
                 else:
-                    running_generations[gen_id]["message"] = message
-                running_generations[gen_id]["progress"] = progress
+                    state["message"] = message
+
+                state["progress"] = progress
             except Exception as _:
                 running_generations[gen_id]["progress"] = progress
                 running_generations[gen_id]["message"] = str(message)
@@ -239,6 +268,30 @@ def run_generation_background(gen_id, agents, stock_file):
         success = generate_algorithms_for_agents(agents, ticker, progress_callback)
 
         if success:
+            # On success, populate full algorithm contents from saved files for the UI
+            try:
+                backend_root = Path(__file__).resolve().parent
+                gen_dir = backend_root / "generate_algo"
+                algo_map = running_generations[gen_id].setdefault("algorithms", {})
+
+                def _sanitize(name: str) -> str:
+                    return name.replace('/', '_').replace('-', '_').replace(':', '_').replace('.', '_')
+
+                if gen_dir.exists():
+                    for file_path in gen_dir.glob('generated_algo_*.py'):
+                        try:
+                            filename = file_path.name
+                            model_part = filename.replace('generated_algo_', '').replace('.py', '')
+                            # Map back to original agent id if possible
+                            orig = next((a for a in agents if _sanitize(a) == model_part), model_part)
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            algo_map[orig] = content
+                        except Exception as fe:
+                            print(f"Failed reading algorithm file {file_path}: {fe}")
+            except Exception as pe:
+                print(f"Post-process population of algorithms failed: {pe}")
+
             running_generations[gen_id]["status"] = "completed"
             running_generations[gen_id]["progress"] = 100
             running_generations[gen_id]["message"] = "All algorithms generated!"
@@ -272,8 +325,19 @@ def run_simulation_only_background(sim_id, ticker):
                 running_simulations[sim_id]["progress"] = progress
                 running_simulations[sim_id]["message"] = str(message)
 
-        # Run simulation
-        results = run_market_simulation(ticker, progress_callback)
+        # If this simulation is triggered from a generation, limit to those agents
+        allowed = None
+        try:
+            # Find the generation that produced these algorithms by matching ticker in ongoing generations
+            for gid, gdata in running_generations.items():
+                if gdata.get("status") in ("completed", "running") and gdata.get("stock", "").upper().startswith(ticker.upper()):
+                    allowed = gdata.get("agents")
+                    break
+        except Exception:
+            allowed = None
+
+        # Run simulation with allowed models if available
+        results = run_market_simulation(ticker, progress_callback, allowed_models=allowed)
 
         running_simulations[sim_id]["status"] = "completed"
         running_simulations[sim_id]["progress"] = 100

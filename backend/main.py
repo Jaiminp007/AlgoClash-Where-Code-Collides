@@ -135,10 +135,13 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
             progress_callback(50, f"Algorithm generation error: {e}")
         raise
     
-    return run_market_simulation(symbol, progress_callback)
+    return run_market_simulation(symbol, progress_callback, allowed_models=selected_agents)
 
-def run_market_simulation(symbol, progress_callback=None):
-    """Run the market simulation part"""
+def run_market_simulation(symbol, progress_callback=None, allowed_models: list[str] | None = None):
+    """Run the market simulation part
+    allowed_models: Optional list of model IDs to include (e.g., 'anthropic/claude-haiku-4.5').
+    When provided, only algorithms with matching sanitized filenames will be loaded.
+    """
     if progress_callback:
         progress_callback(65, "Preparing stock chart...")
     
@@ -194,6 +197,13 @@ def run_market_simulation(symbol, progress_callback=None):
 
     # Discover any generated_algo_*.py files in both locations
     discovered = list(base_gen.glob("generated_algo_*.py")) + list(base_open.glob("generated_algo_*.py"))
+
+    # If a subset of models is specified, filter to only those files
+    allowed_stems = None
+    if allowed_models:
+        def _sanitize(name: str) -> str:
+            return name.replace('/', '_').replace('-', '_').replace(':', '_').replace('.', '_')
+        allowed_stems = {f"generated_algo_{_sanitize(m)}" for m in allowed_models}
     
     # Deduplicate by name
     seen = set()
@@ -201,6 +211,9 @@ def run_market_simulation(symbol, progress_callback=None):
     for p in discovered:
         if p.name in seen:
             continue
+        if allowed_stems is not None:
+            if p.stem not in allowed_stems:
+                continue
         seen.add(p.name)
         algo_modules.append(p)
 
