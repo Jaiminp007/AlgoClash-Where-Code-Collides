@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import './Dashboard.css';
-import CustomDropdown from './CustomDropdown'; // Import the new component
+import CustomDropdown from './CustomDropdown';
+import AlgorithmCard from './AlgorithmCard';
+import ResultsDashboard from './ResultsDashboard';
+import AllAlgorithmsModal from './AllAlgorithmsModal';
+import ModelCard from './ModelCard';
 import AlgorithmPreviewModal from './AlgorithmPreviewModal';
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const [navOpen, setNavOpen] = useState(false);
   const [active, setActive] = useState('home');
   const [agents, setAgents] = useState({});
   const [stocks, setStocks] = useState([]);
@@ -22,7 +24,6 @@ const Dashboard = () => {
   const [simulationStatus, setSimulationStatus] = useState(null);
   const [simulationResults, setSimulationResults] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(true);
   const [progress, setProgress] = useState(0);
   const [currentTask, setCurrentTask] = useState('');
   const [genStates, setGenStates] = useState({}); // { modelName: 'pending'|'generating'|'done' }
@@ -30,10 +31,15 @@ const Dashboard = () => {
   const [codePreview, setCodePreview] = useState('');
   const [codePreviewModel, setCodePreviewModel] = useState('');
   const lastPreviewModelRef = useRef('');
-  const [showAlgoPreview, setShowAlgoPreview] = useState(false);
   const [generationPhase, setGenerationPhase] = useState('idle'); // 'idle', 'generating', 'review', 'simulating', 'completed'
   const [generatedAlgos, setGeneratedAlgos] = useState([]);
-  const [currentSimId, setCurrentSimId] = useState(null);
+  const [currentGenId, setCurrentGenId] = useState(null);
+  const pollingRef = useRef(null);
+  const [showAllAlgos, setShowAllAlgos] = useState(false);
+
+  // New state for preview modal
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [selectedModelPreview, setSelectedModelPreview] = useState(null);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -80,6 +86,19 @@ const Dashboard = () => {
     setSelectedAgents(prev => ({ ...prev, [id]: agent }));
   };
 
+  // Handle model card click to open preview modal
+  const handleCardClick = (modelName, code) => {
+    if (!code) return;
+    setSelectedModelPreview({ modelName, code });
+    setPreviewModalOpen(true);
+  };
+
+  // Close preview modal
+  const closePreviewModal = () => {
+    setPreviewModalOpen(false);
+    setTimeout(() => setSelectedModelPreview(null), 300);
+  };
+
   const handleStartSimulation = async () => {
     // Validate all 6 agents are selected
     const agents = Object.values(selectedAgents).filter(Boolean);
@@ -96,14 +115,24 @@ const Dashboard = () => {
     setIsRunning(true);
     setSimulationResults(null);
     setSimulationStatus('Generating algorithms...');
-    setShowInstructions(false);
     setProgress(0);
+    setGenerationPhase('generating');
+
     // Initialize per-agent generation states
     const uniqueAgents = Array.from(new Set(agents));
     const initStates = {};
     uniqueAgents.forEach(name => { initStates[name] = 'pending'; });
     setGenStates(initStates);
     lastGeneratingRef.current = null;
+
+    // Initialize algorithm cards with pending state
+    const initialAlgos = uniqueAgents.map((name, idx) => ({
+      modelName: name,
+      code: '',
+      status: 'generating',
+      index: idx
+    }));
+    setGeneratedAlgos(initialAlgos);
 
     try {
       const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -122,16 +151,11 @@ const Dashboard = () => {
 
       if (response.ok) {
         const genId = data.generation_id;
+        setCurrentGenId(genId);
         setSimulationStatus('Algorithms generating...');
 
-        // Navigate to review screen
-        navigate('/review', {
-          state: {
-            generationId: genId,
-            selectedAgents: agents,
-            selectedStock: selectedStock
-          }
-        });
+        // Start polling for generation status (stay on same page)
+        pollGenerationStatus(genId);
       } else {
         throw new Error(data.error || 'Failed to start generation');
       }
@@ -143,19 +167,153 @@ const Dashboard = () => {
     }
   };
 
+  const normalizeModelId = (s = '') => String(s).toLowerCase().trim().replace(/:free$/,'');
+
+  const pollGenerationStatus = async (genId) => {
+    try {
+      const apiBase = process.env.REACT_APP_API_BASE_URL || '';
+      const response = await fetch(`${apiBase}/api/generation/${genId}`);
+      const data = await response.json();
+
+  if (data.status === 'completed') {
+        // All algorithms generated successfully
+        setProgress(50);
+        setSimulationStatus('All algorithms generated!');
+
+        // Update algorithm cards with actual code
+        const algorithms = data.algorithms || {};
+        // Build a normalized lookup for algorithm code by model id (strip :free, lowercase)
+        const algoLookup = Object.entries(algorithms).reduce((acc, [k, v]) => {
+          acc[normalizeModelId(k)] = v;
+          return acc;
+        }, {});
+        setGeneratedAlgos(prev => {
+          // If prev list is empty (e.g., previous state not initialized), seed from algorithms keys
+          let base = prev && prev.length ? [...prev] : Object.keys(algorithms).map((k, idx) => ({
+            modelName: k,
+            code: algorithms[k] || '',
+            status: algorithms[k] ? 'completed' : 'failed',
+            index: idx
+          }));
+
+          // Update any existing entries by normalized id
+          const seen = new Set(base.map(a => normalizeModelId(a.modelName)));
+          base = base.map(algo => {
+            const code = algoLookup[normalizeModelId(algo.modelName)] || '';
+            return { ...algo, code, status: code ? 'completed' : 'failed' };
+          });
+
+          // Append any new algorithms that were not in base
+          Object.entries(algorithms).forEach(([k, v]) => {
+            const nk = normalizeModelId(k);
+            if (!seen.has(nk)) {
+              base.push({ modelName: k, code: v || '', status: v ? 'completed' : 'failed', index: base.length });
+            }
+          });
+          return base;
+        });
+
+        // Mark all as done in genStates
+        setGenStates(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(k => { next[k] = 'done'; });
+          return next;
+        });
+
+        // Transition to review phase (stay inline on Dashboard)
+        setGenerationPhase('review');
+        setIsRunning(false);
+      } else if (data.status === 'error') {
+        setSimulationStatus(`Error: ${data.error}`);
+        setIsRunning(false);
+        setGenerationPhase('idle');
+  } else {
+        // Still generating
+        const pct = typeof data.progress === 'number' ? data.progress : 0;
+        const message = data.message || 'Generating algorithms...';
+        setSimulationStatus(message);
+        setProgress(Math.min(45, pct)); // Cap at 45% during generation
+
+        // Update algorithm codes as they arrive
+        if (data.algorithms) {
+          const algoLookup = Object.entries(data.algorithms).reduce((acc, [k, v]) => {
+            acc[normalizeModelId(k)] = v;
+            return acc;
+          }, {});
+          setGeneratedAlgos(prev => {
+            const list = prev && prev.length ? [...prev] : [];
+            const existing = new Set(list.map(a => normalizeModelId(a.modelName)));
+            // Update existing
+            const updated = list.map(algo => {
+              const code = algoLookup[normalizeModelId(algo.modelName)];
+              return { ...algo, code: code || algo.code, status: code ? 'completed' : algo.status };
+            });
+            // Append new ones that arrived but weren't seeded yet
+            Object.entries(data.algorithms).forEach(([k, v]) => {
+              const nk = normalizeModelId(k);
+              if (!existing.has(nk)) {
+                updated.push({ modelName: k, code: v || '', status: v ? 'completed' : 'generating', index: updated.length });
+              }
+            });
+            return updated;
+          });
+        }
+
+        // Update per-model generation states from backend if available (supports concurrency)
+        if (data.model_states && typeof data.model_states === 'object') {
+          setGenStates(prev => {
+            const next = { ...prev };
+            Object.entries(data.model_states).forEach(([model, state]) => {
+              next[model] = state === 'generating' ? 'generating' : (state === 'done' ? 'done' : state);
+            });
+            return next;
+          });
+        } else {
+          // Fallback to parsing human-readable message
+          parseProgressMessage(message);
+        }
+
+
+        // Continue polling
+        pollingRef.current = setTimeout(() => pollGenerationStatus(genId), 2000);
+      }
+    } catch (error) {
+      console.error('Generation polling error:', error);
+      setSimulationStatus(`Polling error: ${error.message}`);
+      setIsRunning(false);
+      setGenerationPhase('idle');
+    }
+  };
+
   const handleStartMarketSimulation = async () => {
-    if (!currentSimId) return;
+    if (!currentGenId) return;
 
     setGenerationPhase('simulating');
     setSimulationStatus('Starting market simulation...');
     setProgress(50);
+    setIsRunning(true);
 
-    // Continue polling - backend continues with market simulation
-    // Note: Backend doesn't have separate pause/resume, so we just resume polling
-    // The backend actually runs the full simulation automatically.
-    // This checkpoint is purely for frontend UX to let users review algorithms.
-    // We'll resume polling and the backend simulation should already be running
-    setTimeout(() => pollSimulationStatus(currentSimId), 1000);
+    try {
+      const apiBase = process.env.REACT_APP_API_BASE_URL || '';
+      const response = await fetch(`${apiBase}/api/simulate/${currentGenId}`, {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const simId = data.simulation_id;
+        // Start polling for simulation results
+        pollSimulationStatus(simId);
+      } else {
+        throw new Error(data.error || 'Failed to start simulation');
+      }
+    } catch (error) {
+      console.error('Simulation start error:', error);
+      setSimulationStatus(`Error: ${error.message}`);
+      setIsRunning(false);
+      setGenerationPhase('review');
+    }
   };
 
   const pollSimulationStatus = async (simId) => {
@@ -170,66 +328,39 @@ const Dashboard = () => {
         setIsRunning(false);
         setProgress(100);
         setGenerationPhase('completed');
-        // keep last preview visible until user navigates back
       } else if (data.status === 'error') {
         setSimulationStatus(`Error: ${data.error}`);
         setIsRunning(false);
-        setGenerationPhase('idle');
+        setGenerationPhase('simulating');
       } else {
-        const pct = typeof data.progress === 'number' ? data.progress : 0;
-        const message = data.message || `Running... ${pct}%`;
+        // Scale progress from 50-100% during simulation
+        const pct = typeof data.progress === 'number' ? data.progress : 50;
+        const scaledProgress = 50 + (pct / 2); // 0-100% becomes 50-100%
+        const message = data.message || 'Running simulation...';
         setSimulationStatus(message);
-        setProgress(pct);
+        setProgress(Math.min(100, scaledProgress));
+        setCurrentTask(message);
 
-        if (data.code_preview) {
-          const incomingModel = String(data.preview_model || '');
-          const incomingCode = String(data.code_preview);
-          // Only update when a new model preview arrives or content changes
-          if (incomingModel !== lastPreviewModelRef.current || incomingCode !== codePreview) {
-            setCodePreview(incomingCode);
-            setCodePreviewModel(incomingModel);
-            lastPreviewModelRef.current = incomingModel;
-          }
-        }
-
-        // Parse and reflect generation progress per model if present
-        parseProgressMessage(message);
-
-        // Check if all algorithms are generated (transition to review phase)
-        if (message.includes('All algorithms generated successfully') && generationPhase === 'generating') {
-          setGenerationPhase('review');
-          setProgress(50);
-          // Fetch generated algorithms list
-          fetchGeneratedAlgorithms();
-          // Don't continue polling - wait for user to click "Start Market Simulation"
-          return;
-        }
-
-        // Only continue polling if not in review phase
-        if (generationPhase !== 'review') {
-          setTimeout(() => pollSimulationStatus(simId), 2000);
-        }
+        // Continue polling
+        pollingRef.current = setTimeout(() => pollSimulationStatus(simId), 2000);
       }
     } catch (error) {
-      console.error('Polling error:', error);
+      console.error('Simulation polling error:', error);
       setSimulationStatus(`Polling error: ${error.message}`);
       setIsRunning(false);
-      setGenerationPhase('idle');
+      setGenerationPhase('review');
     }
   };
 
-  const fetchGeneratedAlgorithms = async () => {
-    try {
-      const apiBase = process.env.REACT_APP_API_BASE_URL || '';
-      const response = await fetch(`${apiBase}/api/algos`);
-      if (response.ok) {
-        const algos = await response.json();
-        setGeneratedAlgos(algos);
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearTimeout(pollingRef.current);
       }
-    } catch (error) {
-      console.error('Error fetching algorithms:', error);
-    }
-  };
+    };
+  }, []);
+
 
   // Interpret backend status messages to maintain per-agent generation states
   const parseProgressMessage = (message = '') => {
@@ -238,8 +369,6 @@ const Dashboard = () => {
     const genMatch = message.match(/Generating algorithm\s+(\d+)\/(\d+)\s+using\s+(.+?)\.\.\./i);
     if (genMatch) {
       const model = genMatch[3];
-      const current = parseInt(genMatch[1]);
-      const total = parseInt(genMatch[2]);
 
       // Mark this model as generating
       setGenStates(prevState => {
@@ -269,6 +398,12 @@ const Dashboard = () => {
   };
 
   const handleBack = () => {
+    // Clear any ongoing polling
+    if (pollingRef.current) {
+      clearTimeout(pollingRef.current);
+      pollingRef.current = null;
+    }
+
     // Return to instruction screen; keep agent selections
     setSimulationResults(null);
     setSimulationStatus(null);
@@ -280,10 +415,14 @@ const Dashboard = () => {
     lastPreviewModelRef.current = '';
     setGenStates({});
     lastGeneratingRef.current = null;
-    setShowInstructions(true);
     setGenerationPhase('idle');
     setGeneratedAlgos([]);
-    setCurrentSimId(null);
+    setCurrentGenId(null);
+
+    // Reset modal state
+    setPreviewModalOpen(false);
+    setSelectedModelPreview(null);
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -338,16 +477,8 @@ const Dashboard = () => {
         </nav>
       </header>
 
-      {/* Top controls below navbar: Preview button and Stock selector */}
+      {/* Top controls below navbar: Stock selector */}
       <div className="top-controls">
-        <button
-          className="preview-algos-button"
-          onClick={() => setShowAlgoPreview(true)}
-          title="View and manage generated algorithms"
-        >
-          📄 Preview Algorithms
-        </button>
-
         <div className="stock-selector-group">
           <label htmlFor="stock-select">Stock data:</label>
           {stocks.length > 0 ? (
@@ -373,37 +504,49 @@ const Dashboard = () => {
 
   {/* Main Content Area */}
       <div className="dashboard-content">
-        {[1, 2, 3].map(i => {
-          const leftKey = `left-${i}`;
-          const rightKey = `right-${i}`;
-          const values = Object.values(selectedAgents);
-          const disabledLeft = new Set(values.filter(a => a && a !== selectedAgents[leftKey]));
-          const disabledRight = new Set(values.filter(a => a && a !== selectedAgents[rightKey]));
-          return (
-            <React.Fragment key={i}>
-              <div className={`side-element left-element left-element-${i}`}>
-                <div className="side-circle left-circle">
-                  <CustomDropdown 
-                    agents={agents} 
-                    selected={selectedAgents[leftKey]} 
-                    onSelect={(agent) => handleAgentSelect(leftKey, agent)}
-                    disabledAgents={disabledLeft}
-                  />
-                </div>
-              </div>
-              <div className={`side-element right-element right-element-${i}`}>
-                <div className="side-circle right-circle">
-                  <CustomDropdown 
-                    agents={agents} 
-                    selected={selectedAgents[rightKey]} 
-                    onSelect={(agent) => handleAgentSelect(rightKey, agent)}
-                    disabledAgents={disabledRight}
-                  />
-                </div>
-              </div>
-            </React.Fragment>
-          );
-        })}
+        <AnimatePresence>
+          {generationPhase === 'idle' && [1, 2, 3].map(i => {
+            const leftKey = `left-${i}`;
+            const rightKey = `right-${i}`;
+            const values = Object.values(selectedAgents);
+            const disabledLeft = new Set(values.filter(a => a && a !== selectedAgents[leftKey]));
+            const disabledRight = new Set(values.filter(a => a && a !== selectedAgents[rightKey]));
+            return (
+              <React.Fragment key={i}>
+                <motion.div
+                  className={`side-element left-element left-element-${i}`}
+                  layoutId={selectedAgents[leftKey] ? normalizeModelId(selectedAgents[leftKey]) : undefined}
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                >
+                  <div className="side-circle left-circle">
+                    <CustomDropdown
+                      agents={agents}
+                      selected={selectedAgents[leftKey]}
+                      onSelect={(agent) => handleAgentSelect(leftKey, agent)}
+                      disabledAgents={disabledLeft}
+                    />
+                  </div>
+                </motion.div>
+                <motion.div
+                  className={`side-element right-element right-element-${i}`}
+                  layoutId={selectedAgents[rightKey] ? normalizeModelId(selectedAgents[rightKey]) : undefined}
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                >
+                  <div className="side-circle right-circle">
+                    <CustomDropdown
+                      agents={agents}
+                      selected={selectedAgents[rightKey]}
+                      onSelect={(agent) => handleAgentSelect(rightKey, agent)}
+                      disabledAgents={disabledRight}
+                    />
+                  </div>
+                </motion.div>
+              </React.Fragment>
+            );
+          })}
+        </AnimatePresence>
       
         {/* Center Blue Box with conditional content */}
         <div className="center-box">
@@ -453,66 +596,67 @@ const Dashboard = () => {
               </div>
               <div className="current-task">{currentTask || 'Generating algorithms...'}</div>
 
-              {/* Active generation status */}
-              <div className="gen-list">
-                {Object.keys(genStates).length > 0 ? (
-                  Object.entries(genStates).map(([name, state]) => (
-                    <div key={name} className={`gen-item ${state}`}>
-                      <span className={`status-icon ${state}`}>
-                        {state === 'done' ? '✅' : state === 'generating' ? '⏳' : '⏸️'}
-                      </span>
-                      <span className="model-name">{name}</span>
-                      {state === 'generating' && <span className="generating-label">Generating...</span>}
-                    </div>
-                  ))
-                ) : (
-                  <div className="gen-empty">Preparing algorithm generation…</div>
-                )}
-              </div>
+              {/* Model Cards Grid inside progress panel */}
+              <div className="model-cards-in-progress">
+                {Array.from(new Set(Object.values(selectedAgents).filter(Boolean))).map((agent, idx) => {
+                  const algo = generatedAlgos.find(a => normalizeModelId(a.modelName) === normalizeModelId(agent));
+                  const status = algo?.status === 'completed' ? 'success' : 'generating';
+                  const code = algo?.code || '';
 
-              {/* Live code preview during generation */}
-              {codePreview && generationPhase === 'generating' && (
-                <div className="code-preview">
-                  <div className="code-preview-header">
-                    Live Preview: {codePreviewModel || 'Algorithm'}
-                  </div>
-                  <pre><code>{codePreview}</code></pre>
-                </div>
-              )}
+                  return (
+                    <ModelCard
+                      key={agent}
+                      modelId={normalizeModelId(agent)}
+                      modelName={agent}
+                      status={status}
+                      index={idx}
+                      onClick={() => handleCardClick(agent, code)}
+                    />
+                  );
+                })}
+              </div>
             </div>
           ) : generationPhase === 'review' ? (
             /* Review & Checkpoint Phase */
             <div className="review-panel">
               <h2>✅ Algorithms Generated Successfully!</h2>
               <p className="review-subtitle">
-                All {generatedAlgos.length} trading algorithms have been generated. Review them below and start the market simulation when ready.
+                These are the algos generated by the agents. You can review them if you want. To continue, press the below button "MARKET SIMULATION".
               </p>
 
-              <div className="generated-algos-list">
-                {generatedAlgos.map((algo, idx) => (
-                  <div key={algo.filename} className="algo-card">
-                    <div className="algo-info">
-                      <span className="algo-number">#{idx + 1}</span>
-                      <span className="algo-model">{algo.modelName}</span>
-                      <span className="algo-size">{(algo.sizeBytes / 1024).toFixed(1)} KB</span>
-                    </div>
-                    <button
-                      className="preview-btn"
-                      onClick={() => {
-                        setShowAlgoPreview(true);
-                      }}
-                    >
-                      👁️ View
-                    </button>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                <button
+                  className="preview-btn"
+                  onClick={() => setShowAllAlgos(true)}
+                >
+                  View All Full Algorithms
+                </button>
+              </div>
+
+              <div className="algorithms-container">
+                {generatedAlgos.length === 0 ? (
+                  <div className="gen-empty">No algorithms received yet. If this persists, check API key access and try again.</div>
+                ) : (
+                  generatedAlgos.map((algo, idx) => (
+                    <AlgorithmCard
+                      key={algo.modelName}
+                      modelName={algo.modelName}
+                      code={algo.code}
+                      index={idx}
+                      status={algo.status}
+                    />
+                  ))
+                )}
               </div>
 
               <button
                 className="start-market-sim-button"
                 onClick={handleStartMarketSimulation}
+                disabled={generatedAlgos.some(a => a.status !== 'completed')}
+                title={generatedAlgos.some(a => a.status !== 'completed') ? 'Waiting for all algorithms to complete...' : 'Start market simulation'}
+                aria-disabled={generatedAlgos.some(a => a.status !== 'completed')}
               >
-                🚀 Start Market Simulation
+                🚀 MARKET SIMULATION
               </button>
 
               <button className="back-button-review" onClick={handleBack}>
@@ -532,14 +676,16 @@ const Dashboard = () => {
         </div>
 
 
-        {/* Start Button */}
-        <button
-          className={`start-button ${isRunning ? 'running' : ''}`}
-          onClick={handleStartSimulation}
-          disabled={isRunning}
-        >
-          {isRunning ? 'GENERATING...' : 'GENERATE ALGORITHMS'}
-        </button>
+        {/* Start Button - only show when idle */}
+        {generationPhase === 'idle' && (
+          <button
+            className={`start-button ${isRunning ? 'running' : ''}`}
+            onClick={handleStartSimulation}
+            disabled={isRunning}
+          >
+            {isRunning ? 'GENERATING...' : 'GENERATE ALGORITHMS'}
+          </button>
+        )}
 
         {/* Simulation Status */}
         {simulationStatus && (
@@ -549,42 +695,31 @@ const Dashboard = () => {
         )}
 
         {/* Results Display */}
-        {simulationResults && (
-          <div className="results-container">
-            <h2>🏁 Battle Results</h2>
-            <div className="winner-display">
-              {simulationResults.winner && (
-                <div className="winner">
-                  🏆 Winner: {simulationResults.winner.name} 
-                  <span className="roi">ROI: {simulationResults.winner.roi?.toFixed(2)}%</span>
-                </div>
-              )}
-            </div>
-            <div className="leaderboard">
-              <h3>📊 Leaderboard</h3>
-              {simulationResults.leaderboard?.map((agent, index) => (
-                <div key={agent.name} className={`leaderboard-item rank-${index + 1}`}>
-                  <span className="rank">
-                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}
-                  </span>
-                  <span className="name">{agent.name}</span>
-                  <span className="roi">{agent.roi?.toFixed(2)}%</span>
-                  <span className="value">${agent.current_value?.toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="results-actions">
-                <button className="back-button" onClick={handleBack}>Back</button>
-              </div>
+        {simulationResults && generationPhase === 'completed' && (
+          <div className="results-overlay">
+            <div className="results-modal">
+              <ResultsDashboard results={simulationResults} onBack={handleBack} />
             </div>
           </div>
         )}
+
+        {/* All Algorithms Modal */}
+        <AllAlgorithmsModal
+          isOpen={showAllAlgos}
+          onClose={() => setShowAllAlgos(false)}
+          algorithms={generatedAlgos}
+        />
+
+        {/* Single Algorithm Preview Modal */}
+        <AlgorithmPreviewModal
+          isOpen={previewModalOpen}
+          onClose={closePreviewModal}
+          modelName={selectedModelPreview?.modelName || ''}
+          code={selectedModelPreview?.code || ''}
+        />
       </div>
 
-      {/* Algorithm Preview Modal */}
-      <AlgorithmPreviewModal
-        isOpen={showAlgoPreview}
-        onClose={() => setShowAlgoPreview(false)}
-      />
+      {/* Inline review only; external preview modal removed */}
     </div>
   );
 };
