@@ -27,8 +27,10 @@ const ReviewScreen = () => {
         const response = await fetch(`${apiBase}/api/generation/${generationId}`);
         const data = await response.json();
 
+        // Always update local copy so we can render partial results while generating
+        setGenerationData(data);
+
         if (data.status === 'completed') {
-          setGenerationData(data);
           setLoading(false);
         } else if (data.status === 'error') {
           setError(data.error || 'Generation failed');
@@ -110,6 +112,24 @@ const ReviewScreen = () => {
             />
           </div>
         </div>
+
+        {/* Show any algorithms that have arrived so far */}
+        {generationData?.algorithms && Object.keys(generationData.algorithms).length > 0 && (
+          <div className="algorithms-grid" style={{ marginTop: '1.5rem' }}>
+            {Object.entries(generationData.algorithms).map(([modelName, code], index) => (
+              <div key={modelName} className="algorithm-card">
+                <div className="algorithm-header">
+                  <h3>
+                    {index + 1}. {modelName}
+                  </h3>
+                </div>
+                <pre className="algorithm-preview">
+                  <code>{String(code).slice(0, 300)}...</code>
+                </pre>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
