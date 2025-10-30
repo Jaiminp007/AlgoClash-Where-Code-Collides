@@ -162,7 +162,23 @@
   box-shadow: 0 10px 30px rgba(0, 53, 102, 0.3);
   margin-bottom: 70px;
   overflow: visible; /* Changed to visible for model cards */
-  transition: height 0.4s ease, min-height 0.4s ease;
+  transition: width 0.4s ease, height 0.4s ease, min-height 0.4s ease;
+}
+
+/* Expanded center box during generation phase */
+.center-box.expanded {
+  width: 75%;
+  height: 95%;
+  box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
+}
+
+/* Extra expanded center box during review phase */
+.center-box.review-expanded {
+  width: 85%;
+  height: 95%;
+  max-height: calc(100vh - 180px);
+  box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
+  margin-bottom: 40px;
 }
 
 /* Instructions content inside center box */
@@ -222,17 +238,43 @@
 .progress-panel {
   color: #ffffff;
   font-family: 'Rajdhani', sans-serif;
-  padding: 28px;
+  padding: 32px;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   background: transparent; /* keep center box color visible */
 }
 
+/* Custom scrollbar for progress panel */
+.progress-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.progress-panel::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.progress-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 211, 10, 0.4);
+  border-radius: 4px;
+}
+
+.progress-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 211, 10, 0.6);
+}
+
 .progress-panel h2 {
-  margin: 10px 0 16px 0;
-  font-size: 1.6rem;
+  margin: 0 0 20px 0;
+  font-size: 1.8rem;
   font-weight: 700;
   color: #FFD60A;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(255, 211, 10, 0.3);
+  flex-shrink: 0;
 }
 
 .progress-bar {
@@ -243,6 +285,7 @@
   border-radius: 999px;
   overflow: hidden;
   box-shadow: inset 0 0 8px rgba(0,0,0,0.2);
+  flex-shrink: 0;
 }
 
 .progress-fill {
@@ -252,8 +295,12 @@
 }
 
 .current-task {
-  margin: 10px 0 16px 0;
+  margin: 12px 0 0 0;
   color: #e6f0ff;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .gen-list {
@@ -648,29 +695,47 @@
   .dashboard-title {
     font-size: 2.5rem;
   }
-  
+
   .center-box {
     width: 80%;
-  height: 45%;
+    height: 45%;
   }
-  
+
+  .center-box.review-expanded {
+    width: 90%;
+    height: 85%;
+    max-height: calc(100vh - 160px);
+  }
+
   .side-element {
     width: 200px;
     height: 80px;
     border-radius: 100px;
   }
-  
+
   .left-element {
     left: -100px;
   }
-  
+
   .right-element {
     right: -100px;
   }
-  
+
   .start-button {
     font-size: 1.5rem;
     padding: 12px 40px;
+  }
+
+  .review-panel {
+    padding: 20px;
+  }
+
+  .review-panel h2 {
+    font-size: 1.5rem;
+  }
+
+  .review-subtitle {
+    font-size: 0.95rem;
   }
 }
 
@@ -678,15 +743,34 @@
   .dashboard-title {
     font-size: 2rem;
   }
-  
+
   .center-box {
     width: 90%;
     height: 30%;
   }
-  
+
+  .center-box.review-expanded {
+    width: 95%;
+    height: 80%;
+    max-height: calc(100vh - 140px);
+  }
+
   .start-button {
     font-size: 1.2rem;
     padding: 10px 30px;
+  }
+
+  .review-panel {
+    padding: 16px;
+  }
+
+  .review-panel h2 {
+    font-size: 1.3rem;
+  }
+
+  .start-market-sim-button {
+    font-size: 1.2rem;
+    padding: 14px 24px;
   }
 }
 
@@ -763,35 +847,48 @@
    ====================== */
 
 .review-panel {
-  padding: 24px;
-  max-height: 70vh;
-  overflow-y: auto;
+  padding: 32px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .review-panel h2 {
   color: #00C864;
-  font-size: 1.8rem;
-  margin-bottom: 12px;
+  font-size: 1.4rem;
+  margin-bottom: 8px;
   text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 200, 100, 0.3);
+  flex-shrink: 0;
 }
 
 .review-subtitle {
   color: #FFD60A;
   text-align: center;
-  margin-bottom: 24px;
-  font-size: 1rem;
-  line-height: 1.5;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.review-actions-header {
+  flex-shrink: 0;
+  margin-bottom: 12px;
 }
 
 .algorithms-container,
 .generated-algos-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px;
-  max-height: 400px;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex: 1;
   overflow-y: auto;
-  padding-right: 8px;
+  overflow-x: hidden;
+  padding-right: 12px;
+  min-height: 0; /* Important for flex scrolling */
 }
 
 .algo-card {
@@ -867,15 +964,16 @@
   background: linear-gradient(135deg, #FFD60A, #FFC300);
   color: #001d3d;
   border: 1px solid #FFC300;
-  padding: 16px 32px;
+  padding: 12px 24px;
   border-radius: 10px;
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 4px 20px rgba(255, 214, 10, 0.3);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .start-market-sim-button:hover {
@@ -894,13 +992,14 @@
   background: rgba(255, 255, 255, 0.05);
   color: #FFD60A;
   border: 1px solid rgba(255, 211, 10, 0.3);
-  padding: 12px 24px;
+  padding: 8px 16px;
   border-radius: 8px;
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  flex-shrink: 0;
 }
 
 .back-button-review:hover {
@@ -911,24 +1010,27 @@
 /* Scrollbar for algo list and algorithms container */
 .algorithms-container::-webkit-scrollbar,
 .generated-algos-list::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .algorithms-container::-webkit-scrollbar-track,
 .generated-algos-list::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  margin: 4px 0;
 }
 
 .algorithms-container::-webkit-scrollbar-thumb,
 .generated-algos-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 211, 10, 0.4);
-  border-radius: 3px;
+  background: rgba(255, 211, 10, 0.5);
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
 .algorithms-container::-webkit-scrollbar-thumb:hover,
 .generated-algos-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 211, 10, 0.6);
+  background: rgba(255, 211, 10, 0.7);
+  box-shadow: 0 0 6px rgba(255, 211, 10, 0.4);
 }
 
 /* ======================
@@ -1032,11 +1134,14 @@
 .model-cards-in-progress {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin-top: 24px;
-  padding: 0;
+  gap: 24px;
+  margin-top: 32px;
+  padding: 0 0 16px 0;
   justify-items: center;
   align-items: start;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* Responsive grid layouts */

@@ -137,10 +137,11 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
     
     return run_market_simulation(symbol, progress_callback, allowed_models=selected_agents)
 
-def run_market_simulation(symbol, progress_callback=None, allowed_models: list[str] | None = None):
+def run_market_simulation(symbol, progress_callback=None, allowed_models: list[str] | None = None, tick_callback=None):
     """Run the market simulation part
     allowed_models: Optional list of model IDs to include (e.g., 'anthropic/claude-haiku-4.5').
     When provided, only algorithms with matching sanitized filenames will be loaded.
+    tick_callback: Optional callback function called on each tick with (tick_num, tick_data, trades)
     """
     if progress_callback:
         progress_callback(65, "Preparing stock chart...")
@@ -204,16 +205,24 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
         def _sanitize(name: str) -> str:
             return name.replace('/', '_').replace('-', '_').replace(':', '_').replace('.', '_')
         allowed_stems = {f"generated_algo_{_sanitize(m)}" for m in allowed_models}
-    
+        print(f"🎯 Filtering algorithms for {len(allowed_models)} models:")
+        for m in allowed_models:
+            print(f"  - {m} → {_sanitize(m)}")
+        print(f"📋 Expected stems: {allowed_stems}")
+
     # Deduplicate by name
     seen = set()
     algo_modules = []
     for p in discovered:
         if p.name in seen:
+            print(f"⏭️ Skipping duplicate: {p.name}")
             continue
         if allowed_stems is not None:
             if p.stem not in allowed_stems:
+                print(f"🚫 Filtering out (not in allowed list): {p.stem}")
                 continue
+            else:
+                print(f"✅ Including: {p.stem}")
         seen.add(p.name)
         algo_modules.append(p)
 
@@ -274,7 +283,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
         order_ttl_ticks=1
     )
     
-    sim = MarketSimulation(agents, config)
+    sim = MarketSimulation(agents, config, tick_callback=tick_callback)
 
     # Run the simulation
     try:

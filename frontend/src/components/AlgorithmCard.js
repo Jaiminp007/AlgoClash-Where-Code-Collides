@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './AlgorithmCard.css';
 
-const AlgorithmCard = ({ modelName, code, index, status = 'completed' }) => {
+const AlgorithmCard = ({ modelName, code, index, status = 'completed', onReplace = null }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const copyToClipboard = () => {
@@ -54,6 +54,16 @@ const AlgorithmCard = ({ modelName, code, index, status = 'completed' }) => {
           <span className="error-badge">❌ FAILED</span>
         </div>
         <div className="card-status">Algorithm generation failed</div>
+        {onReplace && (
+          <div className="card-actions-failed">
+            <button
+              className="replace-agent-btn"
+              onClick={() => onReplace(modelName)}
+            >
+              🔄 Replace Agent
+            </button>
+          </div>
+        )}
       </div>
     );
   }

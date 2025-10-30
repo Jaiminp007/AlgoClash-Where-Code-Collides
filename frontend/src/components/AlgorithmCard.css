@@ -1,14 +1,15 @@
 .algorithm-card {
-  background: rgba(0, 29, 61, 0.4);
-  border: 1px solid rgba(255, 211, 10, 0.2);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
+  background: rgba(0, 29, 61, 0.5);
+  border: 1px solid rgba(255, 211, 10, 0.3);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 0;
   transition: all 0.3s ease;
   cursor: pointer;
   opacity: 0;
   transform: translateY(20px) scale(0.95);
   animation: cardFadeIn 0.4s ease forwards;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 @keyframes cardFadeIn {
@@ -27,14 +28,16 @@
 .algorithm-card[data-index="5"] { animation-delay: 0.6s; }
 
 .algorithm-card:hover {
-  background: rgba(0, 29, 61, 0.6);
+  background: rgba(0, 29, 61, 0.7);
   border-color: #FFD60A;
   transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 12px rgba(255, 211, 10, 0.2);
 }
 
 .algorithm-card.expanded {
-  background: rgba(0, 29, 61, 0.7);
+  background: rgba(0, 29, 61, 0.8);
   border-color: #FFD60A;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4), 0 0 16px rgba(255, 211, 10, 0.3);
 }
 
 .algorithm-card.loading {
@@ -148,6 +151,41 @@
   font-size: 0.9rem;
   font-family: 'Rajdhani', sans-serif;
   font-style: italic;
+}
+
+.card-actions-failed {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 77, 77, 0.2);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.replace-agent-btn {
+  background: linear-gradient(135deg, rgba(255, 211, 10, 0.15), rgba(255, 211, 10, 0.25));
+  color: #FFD60A;
+  border: 1px solid rgba(255, 211, 10, 0.4);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 211, 10, 0.1);
+}
+
+.replace-agent-btn:hover {
+  background: linear-gradient(135deg, #FFD60A, #FFC300);
+  color: #001d3d;
+  border-color: #FFD60A;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 211, 10, 0.3);
+}
+
+.replace-agent-btn:active {
+  transform: translateY(0);
 }
 
 .card-preview {

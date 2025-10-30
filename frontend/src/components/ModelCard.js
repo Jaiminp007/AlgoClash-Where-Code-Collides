@@ -9,7 +9,8 @@ const ModelCard = ({
   onClick,
   position,
   index,
-  errorReason = null
+  errorReason = null,
+  onReplace = null
 }) => {
   const normalizeModelName = (name) => {
     return String(name).split('/').pop().replace(':free', '');
@@ -132,6 +133,20 @@ const ModelCard = ({
       {status === 'success' && (
         <div className="model-card-footer">
           <span className="click-hint">Click to preview</span>
+        </div>
+      )}
+
+      {status === 'error' && onReplace && (
+        <div className="model-card-footer">
+          <button
+            className="replace-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReplace(modelName);
+            }}
+          >
+            Replace Agent
+          </button>
         </div>
       )}
     </motion.div>

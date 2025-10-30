@@ -159,6 +159,69 @@ def get_generation_status(gen_id):
 
     return jsonify(running_generations[gen_id])
 
+@app.route("/api/generation/<gen_id>/regenerate", methods=['POST'])
+def regenerate_single_algorithm(gen_id):
+    """Regenerate a single algorithm for a specific model"""
+    try:
+        print(f"\n{'='*60}")
+        print(f"📥 REGENERATE REQUEST for generation: {gen_id}")
+
+        if gen_id not in running_generations:
+            print(f"❌ Generation {gen_id} not found")
+            return jsonify({"error": "Generation not found"}), 404
+
+        data = request.get_json()
+        old_model = data.get('old_model')
+        new_model = data.get('new_model')
+
+        print(f"🔄 Replacing: {old_model} → {new_model}")
+
+        if not old_model or not new_model:
+            return jsonify({"error": "Both old_model and new_model are required"}), 400
+
+        gen_data = running_generations[gen_id]
+
+        # Update the agent list
+        agents = gen_data.get("agents", [])
+        if old_model in agents:
+            # Replace old model with new model
+            agents = [new_model if a == old_model else a for a in agents]
+            running_generations[gen_id]["agents"] = agents
+        else:
+            # If old model not in agents list, just add the new model
+            agents = list(set([a for a in agents if a != old_model] + [new_model]))
+            running_generations[gen_id]["agents"] = agents
+
+        # Mark the new model as generating
+        model_states = gen_data.setdefault("model_states", {})
+        model_states[new_model] = "generating"
+
+        # Remove old algorithm if exists
+        if old_model in gen_data.get("algorithms", {}):
+            del gen_data["algorithms"][old_model]
+
+        # Start regeneration in background thread
+        thread = threading.Thread(
+            target=regenerate_single_algorithm_background,
+            args=(gen_id, new_model, gen_data.get("stock", "AAPL_data.csv"))
+        )
+        thread.daemon = True
+        thread.start()
+
+        print(f"✅ Started regeneration thread")
+        print(f"{'='*60}\n")
+
+        return jsonify({
+            "status": "started",
+            "message": f"Regenerating algorithm for {new_model}"
+        })
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.post("/api/simulate/<gen_id>")
 def simulate_with_algorithms(gen_id):
     """Run simulation with pre-generated algorithms"""
@@ -186,10 +249,13 @@ def simulate_with_algorithms(gen_id):
         stock_file = gen_data["stock"]
         ticker = stock_file.replace("_data.csv", "").upper()
 
+        # Get the agents list from generation data
+        agents_list = gen_data.get("agents", [])
+
         # Start simulation in background thread
         thread = threading.Thread(
             target=run_simulation_only_background,
-            args=(sim_id, ticker)
+            args=(sim_id, ticker, agents_list)
         )
         thread.daemon = True
         thread.start()
@@ -203,9 +269,95 @@ def simulate_with_algorithms(gen_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def regenerate_single_algorithm_background(gen_id, model, stock_file):
+    """Regenerate a single algorithm in background thread"""
+    try:
+        print(f"🔄 Starting regeneration for {model} in generation {gen_id}")
+
+        # Import generation function
+        from open_router.algo_gen import generate_algorithms_for_agents
+
+        # Extract ticker from filename
+        ticker = stock_file.replace("_data.csv", "").upper()
+        print(f"📊 Using ticker: {ticker}")
+
+        # Progress callback for single model
+        def progress_callback(progress, message):
+            try:
+                state = running_generations[gen_id]
+                model_states = state.setdefault("model_states", {})
+
+                if isinstance(message, str) and message.startswith("PREVIEW::"):
+                    parts = message.split("::", 2)
+                    if len(parts) == 3:
+                        _tag, msg_model, code = parts
+                        if msg_model == model:
+                            state["algorithms"][model] = code
+                            model_states[model] = "done"
+                elif isinstance(message, str) and message.startswith("MODEL_OK::"):
+                    parts = message.split("::", 2)
+                    if len(parts) >= 2 and parts[1] == model:
+                        model_states[model] = "done"
+                elif isinstance(message, str) and message.startswith("MODEL_FAIL::"):
+                    parts = message.split("::", 2)
+                    if len(parts) >= 2 and parts[1] == model:
+                        model_states[model] = "error"
+                elif isinstance(message, str) and message.startswith("MODEL_START::"):
+                    parts = message.split("::", 2)
+                    if len(parts) >= 2 and parts[1] == model:
+                        model_states[model] = "generating"
+            except Exception as e:
+                print(f"Progress callback error: {e}")
+
+        # Generate algorithm for single model
+        print(f"🤖 Calling generate_algorithms_for_agents for {model}...")
+        success = generate_algorithms_for_agents([model], ticker, progress_callback)
+        print(f"{'✅' if success else '❌'} Generation result for {model}: {success}")
+
+        if success:
+            # Read generated file
+            try:
+                from pathlib import Path
+                backend_root = Path(__file__).resolve().parent
+                gen_dir = backend_root / "generate_algo"
+
+                def _sanitize(name: str) -> str:
+                    return name.replace('/', '_').replace('-', '_').replace(':', '_').replace('.', '_')
+
+                sanitized = _sanitize(model)
+                file_path = gen_dir / f"generated_algo_{sanitized}.py"
+
+                if file_path.exists():
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    running_generations[gen_id]["algorithms"][model] = content
+                    running_generations[gen_id]["model_states"][model] = "done"
+                    print(f"✅ Successfully loaded algorithm for {model} ({len(content)} chars)")
+                else:
+                    print(f"❌ Algorithm file not found for {model}: {file_path}")
+                    running_generations[gen_id]["model_states"][model] = "error"
+            except Exception as e:
+                print(f"Failed reading regenerated algorithm: {e}")
+                running_generations[gen_id]["model_states"][model] = "error"
+        else:
+            running_generations[gen_id]["model_states"][model] = "error"
+
+    except Exception as e:
+        print(f"Regeneration error: {e}")
+        running_generations[gen_id]["model_states"][model] = "error"
+        import traceback
+        traceback.print_exc()
+
 def run_generation_background(gen_id, agents, stock_file):
     """Generate algorithms in background thread"""
     try:
+        # Clean up old generated algorithms first
+        backend_root = Path(__file__).resolve().parent
+        gen_dir = backend_root / "generate_algo"
+        if gen_dir.exists() and gen_dir.is_dir():
+            shutil.rmtree(gen_dir, ignore_errors=True)
+            print(f"🧹 Cleaned up old algorithms before generation {gen_id}")
+
         running_generations[gen_id]["status"] = "running"
         running_generations[gen_id]["progress"] = 10
         running_generations[gen_id]["message"] = "Starting algorithm generation..."
@@ -278,15 +430,21 @@ def run_generation_background(gen_id, agents, stock_file):
                     return name.replace('/', '_').replace('-', '_').replace(':', '_').replace('.', '_')
 
                 if gen_dir.exists():
+                    # Only load algorithms for the selected agents (not old files)
                     for file_path in gen_dir.glob('generated_algo_*.py'):
                         try:
                             filename = file_path.name
                             model_part = filename.replace('generated_algo_', '').replace('.py', '')
                             # Map back to original agent id if possible
-                            orig = next((a for a in agents if _sanitize(a) == model_part), model_part)
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                            algo_map[orig] = content
+                            orig = next((a for a in agents if _sanitize(a) == model_part), None)
+                            # Only include if this file matches one of our selected agents
+                            if orig:
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    content = f.read()
+                                algo_map[orig] = content
+                                print(f"✓ Loaded algorithm for {orig}")
+                            else:
+                                print(f"⚠️ Skipping old algorithm file: {filename} (not in selected agents)")
                         except Exception as fe:
                             print(f"Failed reading algorithm file {file_path}: {fe}")
             except Exception as pe:
@@ -306,7 +464,7 @@ def run_generation_background(gen_id, agents, stock_file):
         import traceback
         traceback.print_exc()
 
-def run_simulation_only_background(sim_id, ticker):
+def run_simulation_only_background(sim_id, ticker, agents_list=None):
     """Run simulation only (algorithms already generated)"""
     try:
         running_simulations[sim_id]["status"] = "running"
@@ -325,19 +483,46 @@ def run_simulation_only_background(sim_id, ticker):
                 running_simulations[sim_id]["progress"] = progress
                 running_simulations[sim_id]["message"] = str(message)
 
-        # If this simulation is triggered from a generation, limit to those agents
-        allowed = None
-        try:
-            # Find the generation that produced these algorithms by matching ticker in ongoing generations
-            for gid, gdata in running_generations.items():
-                if gdata.get("status") in ("completed", "running") and gdata.get("stock", "").upper().startswith(ticker.upper()):
-                    allowed = gdata.get("agents")
-                    break
-        except Exception:
-            allowed = None
+        # Tick callback for real-time chart data
+        def tick_callback(tick_num, tick_data, trades):
+            try:
+                if "chart_data" not in running_simulations[sim_id]:
+                    running_simulations[sim_id]["chart_data"] = []
+
+                # Convert trades to serializable format
+                serialized_trades = []
+                for trade in trades[-10:]:  # Keep last 10 trades per tick
+                    try:
+                        serialized_trades.append({
+                            'agent': trade.agent_name if hasattr(trade, 'agent_name') else '',
+                            'side': trade.side.value if hasattr(trade.side, 'value') else str(trade.side),
+                            'quantity': trade.quantity if hasattr(trade, 'quantity') else 0,
+                            'price': trade.price if hasattr(trade, 'price') else 0
+                        })
+                    except Exception:
+                        pass
+
+                running_simulations[sim_id]["chart_data"].append({
+                    'tick': tick_num,
+                    'price': tick_data.get('price', 0),
+                    'timestamp': str(tick_data.get('timestamp', '')),
+                    'trades': serialized_trades
+                })
+
+                # Keep only last 100 ticks to avoid memory issues
+                if len(running_simulations[sim_id]["chart_data"]) > 100:
+                    running_simulations[sim_id]["chart_data"] = running_simulations[sim_id]["chart_data"][-100:]
+
+            except Exception as e:
+                print(f"Tick callback error: {e}")
+
+        # Use the agents list passed from the generation data
+        allowed = agents_list if agents_list else None
+
+        print(f"🎯 Running simulation with {len(allowed) if allowed else 'all'} agents: {allowed}")
 
         # Run simulation with allowed models if available
-        results = run_market_simulation(ticker, progress_callback, allowed_models=allowed)
+        results = run_market_simulation(ticker, progress_callback, allowed_models=allowed, tick_callback=tick_callback)
 
         running_simulations[sim_id]["status"] = "completed"
         running_simulations[sim_id]["progress"] = 100

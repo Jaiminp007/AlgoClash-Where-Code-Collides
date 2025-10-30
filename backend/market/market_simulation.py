@@ -45,17 +45,19 @@ class MarketSimulation:
     - Portfolio management and performance tracking
     """
     
-    def __init__(self, agents: List[TradingAgent], config: Optional[SimulationConfig] = None):
+    def __init__(self, agents: List[TradingAgent], config: Optional[SimulationConfig] = None, tick_callback=None):
         """
         Initialize the market simulation.
-        
+
         Args:
             agents: List of trading agents to participate
             config: Simulation configuration
+            tick_callback: Optional callback function called on each tick with (tick_num, tick_data, trades)
         """
         self.config = config or SimulationConfig()
         self.agent_manager = AgentManager()
         self.order_book = OrderBook()
+        self.tick_callback = tick_callback
         
         # Add all agents to the manager
         for agent in agents:
@@ -183,6 +185,30 @@ class MarketSimulation:
         self._record_tick_data(tick_data, len(agent_orders))
         # Expire any resting orders at end of tick and release reservations
         self._expire_and_cancel_orders()
+
+        # Call tick callback if provided (for real-time updates to frontend)
+        if self.tick_callback:
+            try:
+                # Get recent trades from this tick
+                recent_trades = []
+                if self.config.enable_order_book:
+                    # Get trades that happened in this tick (last N trades)
+                    all_trades = self.order_book.trades
+                    if all_trades:
+                        # Estimate trades from this tick (simple heuristic)
+                        recent_trades = all_trades[-min(20, len(all_trades)):]
+
+                self.tick_callback(
+                    self.current_tick,
+                    {
+                        'price': current_price,
+                        'timestamp': tick_data.timestamp,
+                        'volume': tick_data.volume
+                    },
+                    recent_trades
+                )
+            except Exception as e:
+                print(f"⚠️ Tick callback error: {e}")
         
     def _process_orders_through_book(self, orders: List[Dict[str, Any]], log: bool = True):
         """Process orders through the order book for realistic matching."""

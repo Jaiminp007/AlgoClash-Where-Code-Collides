@@ -7,6 +7,8 @@ import ResultsDashboard from './ResultsDashboard';
 import AllAlgorithmsModal from './AllAlgorithmsModal';
 import ModelCard from './ModelCard';
 import AlgorithmPreviewModal from './AlgorithmPreviewModal';
+import ReplaceAgentModal from './ReplaceAgentModal';
+import MarketSimulationChart from './MarketSimulationChart';
 
 const Dashboard = () => {
   const [active, setActive] = useState('home');
@@ -33,13 +35,21 @@ const Dashboard = () => {
   const lastPreviewModelRef = useRef('');
   const [generationPhase, setGenerationPhase] = useState('idle'); // 'idle', 'generating', 'review', 'simulating', 'completed'
   const [generatedAlgos, setGeneratedAlgos] = useState([]);
-  const [currentGenId, setCurrentGenId] = useState(null);
+  const [currentGenId, setCurrentGenId] = useState(() => {
+    // Initialize from sessionStorage if available
+    return sessionStorage.getItem('currentGenId') || null;
+  });
   const pollingRef = useRef(null);
   const [showAllAlgos, setShowAllAlgos] = useState(false);
+  const [chartData, setChartData] = useState([]);
 
   // New state for preview modal
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [selectedModelPreview, setSelectedModelPreview] = useState(null);
+
+  // State for replace agent modal
+  const [replaceModalOpen, setReplaceModalOpen] = useState(false);
+  const [modelToReplace, setModelToReplace] = useState(null);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -99,6 +109,103 @@ const Dashboard = () => {
     setTimeout(() => setSelectedModelPreview(null), 300);
   };
 
+  // Handle replace agent
+  const handleReplaceAgent = (failedModel) => {
+    console.log('handleReplaceAgent called:', { failedModel, currentGenId, generationPhase });
+    setModelToReplace(failedModel);
+    setReplaceModalOpen(true);
+  };
+
+  // Close replace modal
+  const closeReplaceModal = () => {
+    setReplaceModalOpen(false);
+    setTimeout(() => setModelToReplace(null), 300);
+  };
+
+  // Handle agent replacement
+  const handleAgentReplacement = async (newAgent) => {
+    console.log('handleAgentReplacement called with:', { newAgent, modelToReplace, currentGenId });
+
+    if (!currentGenId) {
+      alert('Error: No generation ID found. Please restart the generation process.');
+      return;
+    }
+
+    if (!modelToReplace) {
+      alert('Error: No model to replace specified.');
+      return;
+    }
+
+    try {
+      const apiBase = process.env.REACT_APP_API_BASE_URL || '';
+      const url = `${apiBase}/api/generation/${currentGenId}/regenerate`;
+
+      console.log('Calling regenerate endpoint:', url);
+      console.log('Payload:', { old_model: modelToReplace, new_model: newAgent });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          old_model: modelToReplace,
+          new_model: newAgent
+        })
+      });
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Backend returned non-JSON response. Please ensure the Flask backend is running and restart it if you just added the regenerate endpoint.');
+      }
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update the currentSessionAgents list
+        const currentSessionAgents = JSON.parse(sessionStorage.getItem('currentSessionAgents') || '[]');
+        const updatedAgents = currentSessionAgents.map(a =>
+          normalizeModelId(a) === normalizeModelId(modelToReplace) ? newAgent : a
+        );
+        sessionStorage.setItem('currentSessionAgents', JSON.stringify(updatedAgents));
+        console.log('Updated session agents:', updatedAgents);
+
+        // Update the generatedAlgos state
+        setGeneratedAlgos(prev => prev.map(algo =>
+          normalizeModelId(algo.modelName) === normalizeModelId(modelToReplace)
+            ? { ...algo, modelName: newAgent, status: 'generating', code: '' }
+            : algo
+        ));
+
+        // Update genStates
+        setGenStates(prev => {
+          const next = { ...prev };
+          delete next[modelToReplace];
+          next[newAgent] = 'generating';
+          return next;
+        });
+
+        closeReplaceModal();
+
+        // Always restart polling to track the regeneration progress
+        console.log('Restarting polling for replaced agent regeneration...');
+        // Clear any existing polling first
+        if (pollingRef.current) {
+          clearTimeout(pollingRef.current);
+          pollingRef.current = null;
+        }
+        // Start new polling
+        pollGenerationStatus(currentGenId);
+      } else {
+        alert(`Failed to replace agent: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Replace agent error:', error);
+      alert(`Error replacing agent: ${error.message}\n\nIf you just added this feature, please restart the Flask backend server.`);
+    }
+  };
+
   const handleStartSimulation = async () => {
     // Validate all 6 agents are selected
     const agents = Object.values(selectedAgents).filter(Boolean);
@@ -125,13 +232,15 @@ const Dashboard = () => {
     setGenStates(initStates);
     lastGeneratingRef.current = null;
 
-    // Initialize algorithm cards with pending state
+    // Initialize algorithm cards with pending state - ONLY for current session
     const initialAlgos = uniqueAgents.map((name, idx) => ({
       modelName: name,
       code: '',
       status: 'generating',
       index: idx
     }));
+    // Store the selected agents in sessionStorage to track current session
+    sessionStorage.setItem('currentSessionAgents', JSON.stringify(uniqueAgents));
     setGeneratedAlgos(initialAlgos);
 
     try {
@@ -151,7 +260,10 @@ const Dashboard = () => {
 
       if (response.ok) {
         const genId = data.generation_id;
+        console.log('Generation started with ID:', genId);
         setCurrentGenId(genId);
+        // Persist to sessionStorage so it survives re-renders
+        sessionStorage.setItem('currentGenId', genId);
         setSimulationStatus('Algorithms generating...');
 
         // Start polling for generation status (stay on same page)
@@ -176,17 +288,55 @@ const Dashboard = () => {
       const data = await response.json();
 
   if (data.status === 'completed') {
+        // Get the current session's agents
+        const currentSessionAgents = JSON.parse(sessionStorage.getItem('currentSessionAgents') || '[]');
+        const currentSessionSet = new Set(currentSessionAgents.map(a => normalizeModelId(a)));
+
+        // Update algorithm cards with actual code - ONLY for current session agents
+        const algorithms = data.algorithms || {};
+        const model_states = data.model_states || {};
+
+        // Build a normalized lookup for algorithm code by model id (strip :free, lowercase)
+        // Filter to only include algorithms for current session agents
+        const algoLookup = Object.entries(algorithms).reduce((acc, [k, v]) => {
+          if (currentSessionSet.has(normalizeModelId(k))) {
+            acc[normalizeModelId(k)] = v;
+          }
+          return acc;
+        }, {});
+
+        // Check if any current session agent is still generating
+        const stillGenerating = currentSessionAgents.some(agent =>
+          model_states[agent] === 'generating'
+        );
+
+        console.log('Generation status check:', {
+          currentSessionAgents,
+          model_states,
+          stillGenerating
+        });
+
+        if (stillGenerating) {
+          // Some algorithms are still generating, continue polling
+          console.log('⏳ Some algorithms still generating, continuing to poll...');
+          setSimulationStatus('Generating algorithms...');
+          pollingRef.current = setTimeout(() => pollGenerationStatus(genId), 2000);
+
+          // Update what we have so far
+          setGeneratedAlgos(prev => prev.map(algo => {
+            const code = algoLookup[normalizeModelId(algo.modelName)] || algo.code;
+            const state = model_states[algo.modelName];
+            const status = state === 'done' ? 'completed' : (state === 'error' ? 'failed' : 'generating');
+            return { ...algo, code, status };
+          }));
+
+          return; // Don't transition to review yet
+        }
+
         // All algorithms generated successfully
         setProgress(50);
         setSimulationStatus('All algorithms generated!');
 
-        // Update algorithm cards with actual code
-        const algorithms = data.algorithms || {};
-        // Build a normalized lookup for algorithm code by model id (strip :free, lowercase)
-        const algoLookup = Object.entries(algorithms).reduce((acc, [k, v]) => {
-          acc[normalizeModelId(k)] = v;
-          return acc;
-        }, {});
         setGeneratedAlgos(prev => {
           // If prev list is empty (e.g., previous state not initialized), seed from algorithms keys
           let base = prev && prev.length ? [...prev] : Object.keys(algorithms).map((k, idx) => ({
@@ -220,8 +370,8 @@ const Dashboard = () => {
           return next;
         });
 
-        // Transition to review phase (stay inline on Dashboard)
-        setGenerationPhase('review');
+        // Stay in generating phase (don't transition to review)
+        // setGenerationPhase('review'); // REMOVED - stay in generating phase
         setIsRunning(false);
       } else if (data.status === 'error') {
         setSimulationStatus(`Error: ${data.error}`);
@@ -236,8 +386,15 @@ const Dashboard = () => {
 
         // Update algorithm codes as they arrive
         if (data.algorithms) {
+          // Get the current session's agents
+          const currentSessionAgents = JSON.parse(sessionStorage.getItem('currentSessionAgents') || '[]');
+          const currentSessionSet = new Set(currentSessionAgents.map(a => normalizeModelId(a)));
+
+          // Filter to only include algorithms for current session agents
           const algoLookup = Object.entries(data.algorithms).reduce((acc, [k, v]) => {
-            acc[normalizeModelId(k)] = v;
+            if (currentSessionSet.has(normalizeModelId(k))) {
+              acc[normalizeModelId(k)] = v;
+            }
             return acc;
           }, {});
           setGeneratedAlgos(prev => {
@@ -292,6 +449,7 @@ const Dashboard = () => {
     setSimulationStatus('Starting market simulation...');
     setProgress(50);
     setIsRunning(true);
+    setChartData([]); // Reset chart data for new simulation
 
     try {
       const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -312,7 +470,7 @@ const Dashboard = () => {
       console.error('Simulation start error:', error);
       setSimulationStatus(`Error: ${error.message}`);
       setIsRunning(false);
-      setGenerationPhase('review');
+      setGenerationPhase('generating'); // Go back to generating phase (not review)
     }
   };
 
@@ -328,6 +486,10 @@ const Dashboard = () => {
         setIsRunning(false);
         setProgress(100);
         setGenerationPhase('completed');
+        // Update chart data one last time
+        if (data.chart_data) {
+          setChartData(data.chart_data);
+        }
       } else if (data.status === 'error') {
         setSimulationStatus(`Error: ${data.error}`);
         setIsRunning(false);
@@ -341,6 +503,11 @@ const Dashboard = () => {
         setProgress(Math.min(100, scaledProgress));
         setCurrentTask(message);
 
+        // Update chart data if available
+        if (data.chart_data) {
+          setChartData(data.chart_data);
+        }
+
         // Continue polling
         pollingRef.current = setTimeout(() => pollSimulationStatus(simId), 2000);
       }
@@ -348,7 +515,7 @@ const Dashboard = () => {
       console.error('Simulation polling error:', error);
       setSimulationStatus(`Polling error: ${error.message}`);
       setIsRunning(false);
-      setGenerationPhase('review');
+      setGenerationPhase('generating'); // Go back to generating phase (not review)
     }
   };
 
@@ -418,6 +585,9 @@ const Dashboard = () => {
     setGenerationPhase('idle');
     setGeneratedAlgos([]);
     setCurrentGenId(null);
+    setChartData([]); // Reset chart data
+    // Clear persisted generation ID
+    sessionStorage.removeItem('currentGenId');
 
     // Reset modal state
     setPreviewModalOpen(false);
@@ -549,7 +719,7 @@ const Dashboard = () => {
         </AnimatePresence>
       
         {/* Center Blue Box with conditional content */}
-        <div className="center-box">
+        <div className={`center-box ${generationPhase === 'generating' ? 'expanded' : ''} ${generationPhase === 'review' ? 'review-expanded' : ''}`}>
           {/* Idle/Instructions State */}
           {generationPhase === 'idle' && !isRunning ? (
             <div className="instructions">
@@ -594,27 +764,44 @@ const Dashboard = () => {
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
               </div>
-              <div className="current-task">{currentTask || 'Generating algorithms...'}</div>
+              <div className="current-task">{currentTask || simulationStatus || 'Starting algorithm generation...'}</div>
 
               {/* Model Cards Grid inside progress panel */}
               <div className="model-cards-in-progress">
-                {Array.from(new Set(Object.values(selectedAgents).filter(Boolean))).map((agent, idx) => {
-                  const algo = generatedAlgos.find(a => normalizeModelId(a.modelName) === normalizeModelId(agent));
-                  const status = algo?.status === 'completed' ? 'success' : 'generating';
+                {generatedAlgos.map((algo, idx) => {
+                  const status = algo?.status === 'completed' ? 'success' : (algo?.status === 'failed' ? 'error' : 'generating');
                   const code = algo?.code || '';
 
                   return (
                     <ModelCard
-                      key={agent}
-                      modelId={normalizeModelId(agent)}
-                      modelName={agent}
+                      key={algo.modelName}
+                      modelId={normalizeModelId(algo.modelName)}
+                      modelName={algo.modelName}
                       status={status}
                       index={idx}
-                      onClick={() => handleCardClick(agent, code)}
+                      onClick={() => handleCardClick(algo.modelName, code)}
+                      onReplace={status === 'error' ? handleReplaceAgent : null}
                     />
                   );
                 })}
               </div>
+
+              {/* Show Market Simulation button when all algorithms are complete */}
+              {!isRunning && generatedAlgos.length > 0 && generatedAlgos.every(a => a.status === 'completed' || a.status === 'failed') && (
+                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button
+                    className="start-market-sim-button"
+                    onClick={handleStartMarketSimulation}
+                    disabled={generatedAlgos.some(a => a.status !== 'completed')}
+                    title={generatedAlgos.some(a => a.status !== 'completed') ? 'Some algorithms failed. Replace them before continuing.' : 'Start market simulation'}
+                  >
+                    🚀 START MARKET SIMULATION
+                  </button>
+                  <button className="back-button-review" onClick={handleBack}>
+                    ← Back
+                  </button>
+                </div>
+              )}
             </div>
           ) : generationPhase === 'review' ? (
             /* Review & Checkpoint Phase */
@@ -623,13 +810,17 @@ const Dashboard = () => {
               <p className="review-subtitle">
                 These are the algos generated by the agents. You can review them if you want. To continue, press the below button "MARKET SIMULATION".
               </p>
+              {/* Debug info - remove after testing */}
+              <div style={{ fontSize: '0.7rem', color: '#666', marginBottom: '6px', textAlign: 'center' }}>
+                Gen ID: {currentGenId || 'NOT SET'}
+              </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <div className="review-actions-header" style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   className="preview-btn"
                   onClick={() => setShowAllAlgos(true)}
                 >
-                  View All Full Algorithms
+                  View All Algorithms
                 </button>
               </div>
 
@@ -644,6 +835,7 @@ const Dashboard = () => {
                       code={algo.code}
                       index={idx}
                       status={algo.status}
+                      onReplace={algo.status === 'failed' ? handleReplaceAgent : null}
                     />
                   ))
                 )}
@@ -671,6 +863,9 @@ const Dashboard = () => {
                 <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
               </div>
               <div className="current-task">{currentTask || simulationStatus || 'Running market simulation...'}</div>
+
+              {/* Real-time Market Chart */}
+              <MarketSimulationChart chartData={chartData} />
             </div>
           ) : null}
         </div>
@@ -716,6 +911,16 @@ const Dashboard = () => {
           onClose={closePreviewModal}
           modelName={selectedModelPreview?.modelName || ''}
           code={selectedModelPreview?.code || ''}
+        />
+
+        {/* Replace Agent Modal */}
+        <ReplaceAgentModal
+          isOpen={replaceModalOpen}
+          onClose={closeReplaceModal}
+          failedModel={modelToReplace}
+          agents={agents}
+          usedAgents={generatedAlgos.map(a => a.modelName)}
+          onReplace={handleAgentReplacement}
         />
       </div>
 
