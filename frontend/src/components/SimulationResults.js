@@ -107,7 +107,7 @@ const SimulationResults = () => {
             <div className="winner-stats">
               <div className="stat">
                 <span className="stat-label">ROI</span>
-                <span className="stat-value">{winner.roi?.toFixed(2)}%</span>
+                <span className="stat-value">{((winner.roi || 0) * 100).toFixed(2)}%</span>
               </div>
               <div className="stat">
                 <span className="stat-label">Final Value</span>
@@ -132,7 +132,7 @@ const SimulationResults = () => {
                   <span className="stat-item">
                     <span className="stat-label">ROI:</span>
                     <span className={`stat-value ${agent.roi >= 0 ? 'positive' : 'negative'}`}>
-                      {agent.roi >= 0 ? '+' : ''}{agent.roi?.toFixed(2)}%
+                      {agent.roi >= 0 ? '+' : ''}{((agent.roi || 0) * 100).toFixed(2)}%
                     </span>
                   </span>
                   <span className="stat-item">

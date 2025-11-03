@@ -162,8 +162,11 @@ class MarketSimulation:
             try:
                 for agent_name, pf in self.agent_manager.portfolios.items():
                     self.agent_manager.initial_values[agent_name] = pf.cash + (pf.stock * current_price)
-            except Exception:
-                pass
+                    self.agent_manager.initial_stocks[agent_name] = pf.stock
+                    if log and not agent_name.startswith("Liquidity_"):
+                        print(f"📊 {agent_name}: Initial stock={pf.stock}, cash=${pf.cash:.2f}, total=${self.agent_manager.initial_values[agent_name]:.2f}")
+            except Exception as e:
+                print(f"⚠️ Error initializing baseline values: {e}")
         
         if log and self.current_tick % 10 == 0:
             print(f"\\n⏰ Tick {self.current_tick}: {tick_data.symbol} @ ${current_price:.2f}")
@@ -466,7 +469,7 @@ class MarketSimulation:
             
             leaderboard = self.agent_manager.get_leaderboard(self.last_price)[:5]
             for i, result in enumerate(leaderboard, 1):
-                print(f"{i}. {result['name']}: ROI={result['roi']:+.2f}% | "
+                print(f"{i}. {result['name']}: ROI={result['roi']*100:+.2f}% | "
                       f"Value=${result['current_value']:.2f} | Trades={result['trades']}")
                       
             print("="*60)
@@ -564,5 +567,5 @@ if __name__ == "__main__":
     
     print("\\n🏆 FINAL LEADERBOARD:")
     for i, result in enumerate(results['leaderboard'][:5], 1):
-        print(f"{i}. {result['name']}: ROI={result['roi']:+.2f}% | "
+        print(f"{i}. {result['name']}: ROI={result['roi']*100:+.2f}% | "
               f"Value=${result['current_value']:.2f}")

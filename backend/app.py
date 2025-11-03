@@ -181,24 +181,27 @@ def regenerate_single_algorithm(gen_id):
 
         gen_data = running_generations[gen_id]
 
-        # Update the agent list
+        # Update the agent list - replace only the FIRST occurrence to avoid
+        # accidentally regenerating multiple slots with the same failed model
         agents = gen_data.get("agents", [])
         if old_model in agents:
-            # Replace old model with new model
-            agents = [new_model if a == old_model else a for a in agents]
+            # Find the first index of old_model and replace only that one
+            idx = agents.index(old_model)
+            agents = agents[:idx] + [new_model] + agents[idx+1:]
             running_generations[gen_id]["agents"] = agents
+            print(f"📝 Updated agents list: replaced position {idx}")
         else:
-            # If old model not in agents list, just add the new model
-            agents = list(set([a for a in agents if a != old_model] + [new_model]))
-            running_generations[gen_id]["agents"] = agents
+            print(f"⚠️ old_model '{old_model}' not found in agents list, skipping list update")
 
         # Mark the new model as generating
         model_states = gen_data.setdefault("model_states", {})
         model_states[new_model] = "generating"
 
-        # Remove old algorithm if exists
+        # Remove old algorithm and state if exists
         if old_model in gen_data.get("algorithms", {}):
             del gen_data["algorithms"][old_model]
+        if old_model in model_states:
+            del model_states[old_model]
 
         # Start regeneration in background thread
         thread = threading.Thread(

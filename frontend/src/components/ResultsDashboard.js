@@ -1,6 +1,101 @@
 import React, { useState } from 'react';
 import './ResultsDashboard.css';
 
+// Import provider icons
+import googlePng from '../assets/google.png';
+import anthropicPng from '../assets/anthropic.png';
+import openaiPng from '../assets/openai.png';
+import metaPng from '../assets/meta.png';
+import qwenPng from '../assets/qwen.png';
+import mistralPng from '../assets/mistral.png';
+import deepseekPng from '../assets/deepseek.png';
+import nousresearchPng from '../assets/nousresearch.png';
+import agenticaPng from '../assets/agentica.png';
+import moonshotaiPng from '../assets/moonshotai.png';
+import openrouterPng from '../assets/openrouter.png';
+import grokPng from '../assets/grok.png';
+import alibabaPng from '../assets/alibaba.png';
+import arliaiPng from '../assets/arliai.png';
+import cognitivecomputationsPng from '../assets/cognitivecomputations.png';
+import meituanPng from '../assets/meituan.png';
+import microsoftPng from '../assets/microsoft.png';
+import nvidiaPng from '../assets/nvidia.png';
+import shisaaiPng from '../assets/shisaai.png';
+import tencentPng from '../assets/tencent.png';
+import tngtechPng from '../assets/tngtech.png';
+import zaiPng from '../assets/zai.png';
+
+const providerIcons = {
+  google: googlePng,
+  anthropic: anthropicPng,
+  openai: openaiPng,
+  meta: metaPng,
+  qwen: qwenPng,
+  mistral: mistralPng,
+  deepseek: deepseekPng,
+  nousresearch: nousresearchPng,
+  agentica: agenticaPng,
+  moonshotai: moonshotaiPng,
+  openrouter: openrouterPng,
+  grok: grokPng,
+  'x-ai': grokPng,
+  alibaba: alibabaPng,
+  arliai: arliaiPng,
+  cognitivecomputations: cognitivecomputationsPng,
+  meituan: meituanPng,
+  microsoft: microsoftPng,
+  nvidia: nvidiaPng,
+  shisaai: shisaaiPng,
+  tencent: tencentPng,
+  tngtech: tngtechPng,
+  zai: zaiPng,
+  'z-ai': zaiPng,
+};
+
+// Parse agent name to extract provider and model
+const parseAgentName = (fullName) => {
+  // Remove "generated_algo_" prefix
+  const withoutPrefix = fullName.replace(/^generated_algo_/, '');
+
+  // Split by underscore to get provider and model parts
+  const parts = withoutPrefix.split('_');
+
+  if (parts.length === 0) return { provider: '', model: fullName };
+
+  // First part is provider
+  const provider = parts[0].toLowerCase();
+
+  // Rest is model name - format it nicely
+  const modelParts = parts.slice(1);
+  const formattedModel = modelParts
+    .map((part, idx) => {
+      // Handle version numbers like "2_5" -> "2.5"
+      const prevPart = idx > 0 ? modelParts[idx - 1] : '';
+      if (/^\d+$/.test(part) && /^\d+$/.test(prevPart)) {
+        return `.${part}`;
+      }
+      // Capitalize first letter
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ')
+    .replace(/\s+\./g, '.'); // Remove spaces before dots
+
+  return { provider, model: formattedModel };
+};
+
+// Component to display formatted agent name with icon
+const AgentNameDisplay = ({ fullName }) => {
+  const { provider, model } = parseAgentName(fullName);
+  const icon = providerIcons[provider];
+
+  return (
+    <div className="agent-name-display">
+      {icon && <img src={icon} alt={provider} className="agent-provider-icon" />}
+      <span className="agent-model-name">{model}</span>
+    </div>
+  );
+};
+
 const ResultsDashboard = ({ results, onBack }) => {
   const [downloadFormat, setDownloadFormat] = useState('json');
 
@@ -59,7 +154,7 @@ const ResultsDashboard = ({ results, onBack }) => {
         agent.name,
         agent.initial_value || 10000,
         agent.current_value || agent.final_value || 0,
-        (agent.roi || 0).toFixed(2),
+        ((agent.roi || 0) * 100).toFixed(2),
         ((agent.current_value || 0) - (agent.initial_value || 10000)).toFixed(2)
       ]);
 
@@ -79,8 +174,8 @@ const ResultsDashboard = ({ results, onBack }) => {
 
   const copyMetrics = () => {
     const text = `AlgoClash Results
-Winner: ${winner?.name} (ROI: ${winner?.roi?.toFixed(2)}%)
-Average ROI: ${metrics.avgROI.toFixed(2)}%
+Winner: ${winner?.name} (ROI: ${((winner?.roi || 0) * 100).toFixed(2)}%)
+Average ROI: ${(metrics.avgROI * 100).toFixed(2)}%
 Total PnL: $${metrics.totalPnL.toFixed(2)}`;
 
     navigator.clipboard.writeText(text);
@@ -116,10 +211,12 @@ Total PnL: $${metrics.totalPnL.toFixed(2)}`;
           <div className="trophy-icon">🏆</div>
           <div className="winner-info">
             <div className="winner-label">Champion</div>
-            <div className="winner-name">{winner.name}</div>
+            <div className="winner-name">
+              <AgentNameDisplay fullName={winner.name} />
+            </div>
             <div className="winner-roi">
               ROI: <span className={winner.roi >= 0 ? 'positive' : 'negative'}>
-                {winner.roi >= 0 ? '+' : ''}{winner.roi?.toFixed(2)}%
+                {winner.roi >= 0 ? '+' : ''}{((winner.roi || 0) * 100).toFixed(2)}%
               </span>
             </div>
           </div>
@@ -146,7 +243,7 @@ Total PnL: $${metrics.totalPnL.toFixed(2)}`;
           <div className="kpi-tile">
             <div className="kpi-label">Average ROI</div>
             <div className={`kpi-value ${metrics.avgROI >= 0 ? 'positive' : 'negative'}`}>
-              {metrics.avgROI >= 0 ? '+' : ''}{metrics.avgROI.toFixed(2)}%
+              {metrics.avgROI >= 0 ? '+' : ''}{(metrics.avgROI * 100).toFixed(2)}%
             </div>
           </div>
         </div>
@@ -159,8 +256,10 @@ Total PnL: $${metrics.totalPnL.toFixed(2)}`;
           <div className="table-header">
             <div className="col-rank">Rank</div>
             <div className="col-agent">Agent</div>
-            <div className="col-initial">Initial</div>
-            <div className="col-final">Final</div>
+            <div className="col-initial">Initial $</div>
+            <div className="col-initial-stock">Initial Stock</div>
+            <div className="col-final">Final $</div>
+            <div className="col-final-stock">Final Stock</div>
             <div className="col-pnl">PnL</div>
             <div className="col-roi">ROI</div>
           </div>
@@ -169,20 +268,26 @@ Total PnL: $${metrics.totalPnL.toFixed(2)}`;
             const final = agent.current_value || agent.final_value || 0;
             const pnl = final - initial;
             const roi = agent.roi || 0;
+            const initialStock = agent.initial_stock || 0;
+            const finalStock = agent.stock || 0;
 
             return (
               <div key={agent.name} className={`table-row rank-${index + 1}`}>
                 <div className="col-rank">
                   {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`}
                 </div>
-                <div className="col-agent">{agent.name}</div>
+                <div className="col-agent">
+                  <AgentNameDisplay fullName={agent.name} />
+                </div>
                 <div className="col-initial">${initial.toLocaleString()}</div>
+                <div className="col-initial-stock">{initialStock}</div>
                 <div className="col-final">${final.toLocaleString()}</div>
+                <div className="col-final-stock">{finalStock}</div>
                 <div className={`col-pnl ${pnl >= 0 ? 'positive' : 'negative'}`}>
                   {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
                 </div>
                 <div className={`col-roi ${roi >= 0 ? 'positive' : 'negative'}`}>
-                  {roi >= 0 ? '+' : ''}{roi.toFixed(2)}%
+                  {roi >= 0 ? '+' : ''}{(roi * 100).toFixed(2)}%
                 </div>
               </div>
             );

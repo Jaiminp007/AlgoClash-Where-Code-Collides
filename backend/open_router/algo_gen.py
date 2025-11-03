@@ -410,175 +410,353 @@ def load_csv_preview(csv_path: str, max_rows: int = 200) -> str:
         return ""
 
 def build_generation_prompt(ticker: str, csv_preview: str) -> str:
-    """Build a dynamic prompt that instructs the model and enforces high diversity across agents."""
-    base = f"""
-You are an expert quantitative trading researcher. Write a single Python function `execute_trade(ticker, cash_balance, shares_held)` that returns one of: "BUY", "SELL", or "HOLD".
+    """Build a prompt that encourages original algorithm design without prescriptive templates."""
+    base = f"""You are an expert quantitative trading researcher tasked with designing a unique, production-ready trading algorithm.
 
-Contract:
-- Signature: `def execute_trade(ticker: str, cash_balance: float, shares_held: int) -> str`
-- Return ONLY one of: BUY | SELL | HOLD (uppercase, no punctuation)
-- Output MUST be only raw Python code (no markdown/comments)
-- Use real market data via yfinance; no synthetic prices or randomness
+═══════════════════════════════════════════════════════════════════════════════
+OBJECTIVE
+═══════════════════════════════════════════════════════════════════════════════
 
-Data requirements:
-- `import yfinance as yf` and download data with period/interval consistent with DIRECTIVES below; always set `progress=False`
-- Use `close_prices = df['Close'].values.flatten()` for arrays and check lengths before computations
-- Avoid pandas-heavy ops in the decision path; prefer numpy/array operations
-- Cache the dataframe in a module-level dict to avoid repeated downloads (exact cache name provided in DIRECTIVES)
+Design and implement a Python function that analyzes real market data and makes intelligent trading decisions.
 
-Error safety (mandatory):
-- Guard against empty/short arrays; check `len(close_prices)` before slicing
-- Handle NaN: if any computed value is NaN, return HOLD
-- Prevent division-by-zero; when denominator <= 0, return HOLD
-- Ensure np.convolve or rolling calcs only run with sufficient data; otherwise HOLD
+Your algorithm will compete against other AI-generated strategies in a live market simulation. Originality and robustness are critical.
 
-Diversity and uniqueness mandates:
-- Each model MUST implement a distinct strategy profile chosen from categories below (also reinforced by DIRECTIVES per model)
-- Vary indicators, lookbacks, thresholds, and decision logic; do NOT reuse the example values
-- Be action-oriented: target ~30–50% BUY/SELL overall under typical conditions (not always HOLD)
-- Use variable names prefixed with a unique per-model prefix (provided in DIRECTIVES) and the exact cache variable name provided
+═══════════════════════════════════════════════════════════════════════════════
+FUNCTION CONTRACT (MANDATORY)
+═══════════════════════════════════════════════════════════════════════════════
 
-Strategy categories (choose ONE primary focus and may combine with a secondary):
-- MEAN REVERSION (deviations from MA/bands)
-- MOMENTUM/TREND (breakouts, crossovers, slope)
-- VOLATILITY (ATR/StdDev regimes, squeeze/expansion)
-- VOLUME CONFIRMATION (OBV/volume filters)
-- OSCILLATORS (RSI/MACD/Stochastic/Williams %R)
-- TIME REGIME (session time buckets)
-- RISK-ADJUSTED (volatility scaling, drawdown guards)
+Function signature:
+    def execute_trade(ticker: str, cash_balance: float, shares_held: int) -> str
 
-Period/interval options (choose ONE):
-- SHORT: 5–10 days intraday (e.g., 5d/1m, 10d/1m)
-- MEDIUM: 15–45 days (e.g., 30d/15m, 45d/30m)
-- LONG: 60–90 days (e.g., 60d/30m, 90d/1h)
-- MIXED: compute features from multiple downloads (keep minimal and cache separately)
+Parameters:
+    - ticker: Stock symbol (e.g., "AAPL", "TSLA")
+    - cash_balance: Available cash in USD (may be negative if borrowing)
+    - shares_held: Current stock position (positive for long, negative for short)
 
-Indicator combination (choose ONE):
-- SINGLE INDICATOR
-- DUAL CROSSOVER
-- MULTI-FACTOR (3+ signals combined)
-- CUSTOM METRIC (design your own)
+Return value:
+    Must return EXACTLY one of these strings: "BUY", "SELL", or "HOLD"
+    - Uppercase only, no quotes in the return statement
+    - No explanations, no additional text
 
-Threshold style (choose ONE):
-- AGGRESSIVE (frequent trades)
-- MODERATE (balanced)
-- CONSERVATIVE (selective)
-- ADAPTIVE (based on recent volatility)
+CRITICAL TRADING RULES:
+    - BUY when you predict price will INCREASE (go long or cover shorts)
+    - SELL when you predict price will DECREASE (take profit or short sell)
+    - Short selling is enabled: You can SELL even with shares_held <= 0
+    - PROFIT IN ANY MARKET: Make money whether prices go up OR down
+    - Detect market direction and trade accordingly (long in uptrends, short in downtrends)
 
-Implementation guidance:
-- Derive windows from array length or provided parameters; avoid the sample `window=10`
-- Prefer prime or non-trivial window choices (e.g., 7/11/19) and parameterize with provided DIRECTIVES
-- Gate signals with sanity checks (trend filter, volatility floor, volume confirm) to reduce noise
-- Keep the function pure (no printing, no files, no globals except the cache dict)
+Output format:
+    - Raw Python code ONLY
+    - No markdown code fences (no ```)
+    - No explanatory comments or docstrings
+    - No print statements or debug output
+    - Code must be immediately executable
 
-Example pattern (do NOT copy values; adapt logic safely):
-import yfinance as yf
-import numpy as np
+═══════════════════════════════════════════════════════════════════════════════
+DATA SOURCING REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════════════
 
-_unique_cache = {{}}
+1. Use yfinance library to fetch real historical market data
+   - Import: import yfinance as yf
+   - Download syntax: yf.download(ticker, period="...", interval="...", progress=False)
+   - CRITICAL: Always set progress=False to suppress output
 
-def execute_trade(ticker, cash_balance, shares_held):
-    global _unique_cache
-    if ticker not in _unique_cache:
-        _unique_cache[ticker] = yf.download(ticker, period="5d", interval="1m", progress=False)
-    df = _unique_cache.get(ticker)
-    if df is None or len(df) < 20:
-        return "HOLD"
-    close_prices = df['Close'].values.flatten()
-    if len(close_prices) < 20:
-        return "HOLD"
-    # compute indicators...
-    return "HOLD"
+2. Choose period and interval appropriate for your strategy:
+   - Short-term: period="5d" to "10d", interval="1m" to "5m"
+   - Medium-term: period="1mo" to "3mo", interval="15m" to "1h"
+   - Long-term: period="6mo" to "1y", interval="1h" to "1d"
+   - Multi-timeframe: Fetch multiple datasets if needed
 
-You will ALSO receive DIRECTIVES below that specify a unique cache name, variable prefix, period/interval, and required parameter values for THIS model. You MUST follow them exactly.
+3. Implement caching to avoid redundant API calls:
+   - Use a module-level dictionary (global variable)
+   - Cache the downloaded dataframe per ticker
+   - Only download once per ticker per session
 
-Now create a UNIQUE algorithm for ticker {ticker} following the DIRECTIVES.
+4. Data handling best practices:
+   - Extract close prices: close_prices = df['Close'].values.flatten()
+   - You can also use: df['Open'], df['High'], df['Low'], df['Volume']
+   - Always verify data availability before processing
 
-CRITICAL checks list:
-1) Use `close_prices = df['Close'].values.flatten()`
-2) Check `len(close_prices) >= needed_window` before slicing
-3) Handle NaNs and division-by-zero by returning HOLD
-4) Keep names ASCII-only; use the provided prefix for all new variables
-5) Actionable: aim for ~30–50% BUY/SELL overall (avoid always HOLD)
+═══════════════════════════════════════════════════════════════════════════════
+ERROR HANDLING (CRITICAL)
+═══════════════════════════════════════════════════════════════════════════════
 
-Context preview (local CSV tail for calibration; still fetch with yfinance):
+Your function MUST handle these edge cases gracefully:
+
+1. Insufficient data:
+   - Check if dataframe is empty or None
+   - Verify array length before indexing: if len(close_prices) < required_window
+   - Return "HOLD" when data is insufficient
+
+2. NaN/Inf values:
+   - Check for NaN: if np.isnan(value) or not np.isfinite(value)
+   - Return "HOLD" if any critical calculation yields NaN or Inf
+
+3. Division by zero:
+   - Check denominators: if denominator <= 0 or denominator == 0
+   - Return "HOLD" to avoid exceptions
+
+4. Array operations:
+   - Ensure window sizes don't exceed array length
+   - Validate indices before slicing
+
+5. Exception handling:
+   - Wrap main logic in try/except
+   - Return "HOLD" on any exception
+
+═══════════════════════════════════════════════════════════════════════════════
+ALGORITHM DESIGN PHILOSOPHY
+═══════════════════════════════════════════════════════════════════════════════
+
+CREATE AN ORIGINAL STRATEGY. Do not implement generic moving average crossovers or basic RSI thresholds.
+
+PROFIT IN ANY MARKET CONDITION:
+Your algorithm must be able to profit whether the market goes UP or DOWN:
+    - Uptrend detected → BUY (go long) to profit from rising prices
+    - Downtrend detected → SELL (go short) to profit from falling prices
+    - Sideways/uncertain → HOLD or trade ranges
+    - You can short sell (SELL with shares_held <= 0) to profit from declines
+    - Focus on DIRECTIONAL PREDICTION, not just momentum following
+
+Design your algorithm around a clear market hypothesis:
+
+1. What market inefficiency or pattern are you exploiting?
+2. What signals validate your hypothesis?
+3. Under what specific conditions do you BUY vs SELL vs HOLD?
+4. How do you filter out noise and false signals?
+5. How do you detect market direction (up, down, sideways)?
+
+Strategy approaches to consider (choose and innovate):
+   - Mean reversion: Price deviations from equilibrium, Bollinger Bands, z-scores
+   - Momentum: Trend following, breakouts, rate of change, MACD
+   - Volatility: ATR regimes, volatility compression/expansion, Keltner Channels
+   - Volume analysis: Volume spikes, OBV, volume-weighted metrics
+   - Multi-factor: Combine uncorrelated signals with weighted scoring
+   - Statistical: Cointegration, correlation patterns, statistical arbitrage
+   - Pattern recognition: Support/resistance, candlestick patterns, chart formations
+   - Adaptive: Dynamic thresholds based on market conditions
+   - Risk-adjusted: Sharpe optimization, drawdown protection, volatility scaling
+
+Technical indicators library (use as needed):
+   - Moving averages: SMA, EMA, WMA
+   - Oscillators: RSI, Stochastic, Williams %R, CCI
+   - Trend: MACD, ADX, Aroon, Parabolic SAR
+   - Volatility: ATR, Bollinger Bands, Standard Deviation
+   - Volume: OBV, VWAP, Volume Rate of Change
+   - Custom: Design your own derived metrics
+
+Performance targets:
+   - Aim for 30-50% actionable decisions (BUY or SELL)
+   - Avoid algorithms that always return HOLD
+   - Balance signal frequency with signal quality
+   - CRITICAL: Profit in both UP and DOWN markets via directional trading
+   - Use BUY for uptrends, SELL for downtrends (short selling enabled)
+   - Your goal is ABSOLUTE RETURNS regardless of market direction
+
+═══════════════════════════════════════════════════════════════════════════════
+IMPLEMENTATION REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Imports:
+   - Required: import yfinance as yf, import numpy as np
+   - Optional: import pandas as pd (minimize usage for performance)
+   - Do NOT import: matplotlib, sklearn, tensorflow, or external libraries
+
+2. Structure:
+   - Define cache dictionary at module level
+   - Implement execute_trade function
+   - All logic inside the function or helper functions
+
+3. Variables and naming:
+   - Use descriptive variable names
+   - Keep code clean and readable
+   - Avoid single-letter variables except in loops
+
+4. Performance:
+   - Minimize computational complexity
+   - Avoid nested loops over large datasets
+   - Use numpy vectorized operations when possible
+
+5. Determinism:
+   - No random number generation
+   - No external API calls except yfinance
+   - Algorithm should be reproducible
+
+═══════════════════════════════════════════════════════════════════════════════
+YOUR SPECIFIC ASSIGNMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Ticker: {ticker}
 """
+
     if csv_preview:
-        base += f"\n```\n{csv_preview}\n```\n"
+        preview_lines = csv_preview.split('\n')[:50]  # Limit preview size
+        preview_sample = '\n'.join(preview_lines)
+        base += f"""
+Recent market data sample:
+```
+{preview_sample}
+```
+
+This is a reference. Your algorithm must fetch fresh data using yfinance.
+"""
+
+    base += """
+═══════════════════════════════════════════════════════════════════════════════
+FINAL INSTRUCTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+You will receive a STRATEGY DIRECTIVE below that specifies your unique trading philosophy and approach. Design your algorithm to embody that specific strategy.
+
+Requirements checklist:
+✓ Function named execute_trade with exact signature
+✓ Returns "BUY", "SELL", or "HOLD" (uppercase strings)
+✓ Uses yfinance with progress=False
+✓ Implements caching for data downloads
+✓ Handles all error cases (insufficient data, NaN, division by zero)
+✓ Raw Python code only (no markdown, no comments)
+✓ Original strategy design (not a generic template)
+
+Now design your algorithm. Be creative, rigorous, and compete to win.
+"""
     return base
 
 def build_diversity_directives(model_id: str) -> str:
-    """Create deterministic per-model directives to enforce diverse strategies with concrete parameters."""
+    """Create deterministic per-model directives focused on strategy philosophy rather than implementation."""
     # Deterministic seed from model_id
     seed_int = int(hashlib.md5(model_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed_int)
 
-    strategy_types = [
-        "MEAN REVERSION", "MOMENTUM", "VOLATILITY", "VOLUME-BASED",
-        "TECHNICAL INDICATORS", "PATTERN RECOGNITION", "TIME-BASED",
-        "RISK-ADJUSTED", "ARBITRAGE", "CONTRARIAN"
+    # Market hypotheses that drive different strategies
+    market_hypotheses = [
+        "Prices tend to revert to their mean after extreme movements - profit from reversals in BOTH directions",
+        "Strong trends persist longer than random walks - ride uptrends long, downtrends short",
+        "Volatility clustering creates predictable regime changes - trade directionally based on regime detection",
+        "Volume precedes price - unusual volume patterns signal direction changes before they happen",
+        "Multiple uncorrelated signals combined provide more reliable directional predictions",
+        "Market overreactions create short-term mispricings - fade extremes by shorting peaks and buying dips",
+        "Statistical anomalies in price distributions reveal systematic directional biases to exploit",
+        "Price patterns repeat due to human psychology - identify formations and trade the breakout direction",
+        "Momentum accelerates before reversals - detect exhaustion and trade the reversal direction",
+        "Markets alternate between trending and ranging phases - go directional in trends, neutral in ranges",
+        "Support and resistance levels create predictable bounces and breakouts - trade both directions",
+        "Rate of change divergences signal impending direction changes - front-run the move",
+        "Intraday volatility patterns are predictable - trade the dominant intraday direction",
+        "Correlation breakdowns signal regime shifts - reposition directionally for the new regime",
+        "Directional bias emerges from multiple timeframe alignment - trade when timeframes agree",
+        "Risk-adjusted returns come from accurate directional prediction, not just momentum following",
+        "Market microstructure imbalances reveal short-term directional edges to exploit",
+        "Sentiment extremes mark turning points - short at euphoria, buy at panic"
     ]
-    data_periods = [
-        ("SHORT-TERM", "5d", "1m"), ("SHORT-TERM", "10d", "1m"),
-        ("MEDIUM-TERM", "30d", "15m"), ("MEDIUM-TERM", "45d", "30m"),
-        ("LONG-TERM", "60d", "30m"), ("LONG-TERM", "90d", "1h"),
-        ("MIXED", "30d", "15m")
+
+    # Time horizons with philosophy rather than exact parameters
+    time_horizons = [
+        "ULTRA-SHORT-TERM: Focus on recent price action and intraday patterns (minutes to hours)",
+        "SHORT-TERM: Capitalize on daily volatility and short-term trends (hours to days)",
+        "MEDIUM-TERM: Trade swing movements and weekly patterns (days to weeks)",
+        "LONG-TERM: Capture major trends and longer-cycle patterns (weeks to months)",
+        "MULTI-TIMEFRAME: Synthesize signals across multiple time scales for confirmation"
     ]
-    indicator_combo = ["SINGLE INDICATOR", "DUAL CROSSOVER", "MULTI-FACTOR", "CUSTOM METRIC"]
-    thresholds = ["AGGRESSIVE", "MODERATE", "CONSERVATIVE", "ADAPTIVE"]
-    logic_types = ["ALWAYS BUY/SELL", "CONDITIONAL", "PROBABILISTIC", "THRESHOLD-BASED"]
-    portfolio_styles = ["AGGRESSIVE", "CONSERVATIVE", "BALANCED", "ADAPTIVE"]
 
-    strat = rng.choice(strategy_types)
-    period_label, period_val, interval_val = rng.choice(data_periods)
-    combo = rng.choice(indicator_combo)
-    thresh = rng.choice(thresholds)
-    logic = rng.choice(logic_types)
-    port = rng.choice(portfolio_styles)
+    # Risk profiles that guide trading behavior
+    risk_profiles = [
+        "AGGRESSIVE: High frequency trading with tight entry/exit thresholds, accept more false signals",
+        "CONSERVATIVE: Selective trading requiring multiple confirmations, prioritize accuracy over frequency",
+        "BALANCED: Moderate frequency with reasonable filters, balance signal quality and quantity",
+        "ADAPTIVE: Dynamically adjust aggression based on market volatility and recent performance",
+        "CONTRARIAN: Trade against prevailing sentiment when indicators show extremes"
+    ]
 
-    # Unique variable prefix and cache name
-    var_prefix = f"v{hashlib.md5((model_id+'-vars').encode()).hexdigest()[:6]}_"
-    cache_name = f"_{var_prefix}cache"
+    # Signal combination approaches
+    signal_approaches = [
+        "Use a single powerful indicator with optimal parameters and strong filters",
+        "Combine two complementary indicators (e.g., trend + momentum) with clear crossover logic",
+        "Build a multi-factor scoring model weighting 3+ uncorrelated signals",
+        "Design a custom composite metric that captures your unique market view",
+        "Use regime detection to switch between different sub-strategies",
+        "Implement statistical scoring based on historical distributions and z-scores",
+        "Create adaptive thresholds that adjust based on recent market behavior"
+    ]
 
-    # Deterministic numeric parameters
-    fast_ma = rng.choice([5, 7, 9, 11])
-    slow_ma = rng.choice([20, 30, 45, 60])
-    rsi_win = rng.choice([7, 10, 14, 21])
-    bb_win = rng.choice([12, 18, 20, 24])
-    vol_lb = rng.choice([15, 30, 45])
-    use_rsi = rng.choice([True, False])
-    use_bbands = rng.choice([True, False])
-    use_vol_confirm = rng.choice([True, False])
+    # Specific focus areas for differentiation
+    focus_areas = [
+        "Price action: Focus on OHLC patterns, candlestick formations, and price momentum",
+        "Volume analysis: Emphasize volume patterns, volume-weighted metrics, and OBV",
+        "Volatility metrics: Use ATR, standard deviation, Bollinger Bands, and volatility regimes",
+        "Oscillators: Leverage RSI, Stochastic, Williams %R, or CCI for overbought/oversold",
+        "Trend indicators: Employ moving averages, MACD, ADX, or custom trend metrics",
+        "Statistical measures: Apply z-scores, percentile ranks, or distribution analysis",
+        "Rate of change: Analyze acceleration, momentum derivatives, and velocity metrics",
+        "Support/resistance: Identify and trade key price levels using historical patterns"
+    ]
 
-    # Build explicit directives
+    # Select random elements based on model_id seed
+    hypothesis = rng.choice(market_hypotheses)
+    time_horizon = rng.choice(time_horizons)
+    risk_profile = rng.choice(risk_profiles)
+    signal_approach = rng.choice(signal_approaches)
+    focus_area = rng.choice(focus_areas)
+
+    # Create a unique strategy philosophy statement
     dir_text = f"""
+═══════════════════════════════════════════════════════════════════════════════
+YOUR UNIQUE STRATEGY MANDATE
+═══════════════════════════════════════════════════════════════════════════════
 
-MANDATORY PER-MODEL DIRECTIVES (for model: {model_id}):
-- STRATEGY TYPE = {strat}
-- DATA PERIOD = {period_label} using yf.download(..., period="{period_val}", interval="{interval_val}")
-- INDICATOR COMBINATION = {combo}
-- THRESHOLD STYLE = {thresh}
-- LOGIC STYLE = {logic}
-- PORTFOLIO STYLE = {port}
-- CACHE VARIABLE NAME = {cache_name} (use exactly this name)
-- VARIABLE PREFIX = {var_prefix} (prefix all your new variables)
-- TARGET ACTION RATE = ~30–50% BUY/SELL under typical conditions
+Model ID: {model_id}
 
-MODEL-SPECIFIC PARAMETERS (use these exact values when applicable):
-- FAST_MA = {fast_ma}
-- SLOW_MA = {slow_ma}
-- RSI_WINDOW = {rsi_win} (use only if `USE_RSI = True`)
-- BB_WINDOW = {bb_win} (use only if `USE_BBANDS = True`)
-- VOL_LOOKBACK = {vol_lb}
-- USE_RSI = {use_rsi}
-- USE_BBANDS = {use_bbands}
-- USE_VOLUME_CONFIRM = {use_vol_confirm}
+CORE MARKET HYPOTHESIS:
+{hypothesis}
 
-Implementation notes:
-- Download period/interval exactly as specified
-- Use the cache variable name exactly as provided and populate it per ticker
-- Prefer these parameter values over any defaults; avoid example values from the prompt
-- Ensure all computations check array length and NaN safety before use
+TIME HORIZON:
+{time_horizon}
+
+RISK PROFILE:
+{risk_profile}
+
+SIGNAL APPROACH:
+{signal_approach}
+
+TECHNICAL FOCUS:
+{focus_area}
+
+═══════════════════════════════════════════════════════════════════════════════
+IMPLEMENTATION GUIDANCE
+═══════════════════════════════════════════════════════════════════════════════
+
+Design your algorithm to embody this specific philosophy. Your implementation should:
+
+1. Choose data period and interval that align with your time horizon
+2. Select indicators and metrics that validate your market hypothesis
+3. Set thresholds and filters consistent with your risk profile
+4. Implement signal logic that matches your chosen approach
+5. Emphasize the technical focus area specified above
+
+KEY REQUIREMENTS:
+- Be distinctly different from generic template strategies
+- Make the hypothesis testable through your indicator choices
+- Ensure the risk profile is reflected in your trading frequency and thresholds
+- Target 30-50% actionable decisions (BUY or SELL) under typical market conditions
+- CRITICAL: Your algorithm MUST be able to profit in BOTH rising and falling markets
+- Detect market direction and trade accordingly (long when bullish, short when bearish)
+- Don't just follow momentum - predict direction and position accordingly
+
+DIFFERENTIATION:
+Your algorithm must be recognizably different from other models. Avoid:
+- Generic dual moving average crossovers with standard parameters
+- Basic RSI > 70 / RSI < 30 threshold strategies
+- Simple Bollinger Band breakout systems without additional logic
+- Strategies that always return HOLD
+
+Instead, create sophisticated logic that:
+- Combines multiple signals in novel ways
+- Uses adaptive or dynamic thresholds
+- Implements multi-layer filters for signal quality
+- Reflects deep understanding of your market hypothesis
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Now implement your original algorithm. Make it compete to win.
 """
     return dir_text
 
