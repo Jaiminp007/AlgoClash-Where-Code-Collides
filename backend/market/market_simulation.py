@@ -201,12 +201,27 @@ class MarketSimulation:
                         # Estimate trades from this tick (simple heuristic)
                         recent_trades = all_trades[-min(20, len(all_trades)):]
 
+                # Calculate portfolio values for each agent (cash + stock value)
+                agent_portfolios = {}
+                for agent_name, portfolio in self.agent_manager.portfolios.items():
+                    # Skip liquidity providers from chart
+                    if not agent_name.startswith('Liquidity_'):
+                        portfolio_value = portfolio.cash + (portfolio.stock * current_price)
+                        # Clean up agent name (remove generated_algo_ prefix)
+                        clean_name = agent_name.replace('generated_algo_', '')
+                        agent_portfolios[clean_name] = {
+                            'value': portfolio_value,
+                            'cash': portfolio.cash,
+                            'stock': portfolio.stock
+                        }
+
                 self.tick_callback(
                     self.current_tick,
                     {
                         'price': current_price,
                         'timestamp': tick_data.timestamp,
-                        'volume': tick_data.volume
+                        'volume': tick_data.volume,
+                        'agent_portfolios': agent_portfolios  # Add agent portfolio values
                     },
                     recent_trades
                 )

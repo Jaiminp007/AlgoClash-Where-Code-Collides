@@ -509,7 +509,8 @@ def run_simulation_only_background(sim_id, ticker, agents_list=None):
                     'tick': tick_num,
                     'price': tick_data.get('price', 0),
                     'timestamp': str(tick_data.get('timestamp', '')),
-                    'trades': serialized_trades
+                    'trades': serialized_trades,
+                    'agent_portfolios': tick_data.get('agent_portfolios', {})  # Add agent portfolio values
                 })
 
                 # Keep only last 100 ticks to avoid memory issues

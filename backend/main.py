@@ -165,8 +165,9 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     print("\n🏦 STEP 3: Starting Market Simulation")
     print("-" * 40)
     
-    # Create tick generator for simulation with faster processing
-    tick_src = YFinanceTickGenerator(symbol=symbol, period="1d", interval="1m").stream(sleep_seconds=0.1)  # Reduced sleep
+    # Create tick generator with MORE DATA for better signals
+    # Using 5 days of 1-minute data = ~1950 ticks available (5 days × 6.5 hours × 60 min)
+    tick_src = YFinanceTickGenerator(symbol=symbol, period="5d", interval="1m").stream(sleep_seconds=0.01)  # 5 days of data
 
     # Discover generated algorithm modules
     base_gen = Path(__file__).resolve().parent / "generate_algo"
@@ -266,19 +267,19 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     # Create simulation with ORDER BOOK ENABLED and faster processing
     from market.market_simulation import SimulationConfig
     config = SimulationConfig(
-        max_ticks=200,  # INCREASED: More ticks = more trading opportunities
-        tick_sleep=0.01,  # 10ms between ticks for speed
+        max_ticks=500,  # DRAMATICALLY INCREASED: 5x original = more opportunities
+        tick_sleep=0.005,  # 5ms between ticks for speed
         log_trades=True,
-        log_orders=True,  # Enable order logging to see what's happening
+        log_orders=False,  # Disable for performance with 500 ticks
         enable_order_book=True,  # ENABLE ORDER BOOK for proper matching
         initial_cash=10000.0,
         initial_stock=0,  # CHANGED: Start with cash only for clearer ROI
     mm_initial_stock=150,
         # Enable margin and short selling to increase volume/ROE dispersion
         allow_negative_cash=True,
-        cash_borrow_limit=30000.0,  # INCREASED: More leverage available
+        cash_borrow_limit=40000.0,  # INCREASED: 4x initial cash leverage
         allow_short=True,
-    max_short_shares=100,  # INCREASED: Can short more shares
+    max_short_shares=150,  # INCREASED: Can short 1.5x more shares
         # Expire unfilled limit orders each tick to free reservations
         order_ttl_ticks=1
     )
@@ -289,7 +290,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     try:
         if progress_callback:
             progress_callback(90, "Running market simulation...")
-        results = sim.run(ticks=tick_src, max_ticks=200, log=True)  # INCREASED to match config
+        results = sim.run(ticks=tick_src, max_ticks=500, log=True)  # INCREASED to 500 ticks
         if progress_callback:
             progress_callback(95, "Calculating final results...")
     except KeyboardInterrupt:

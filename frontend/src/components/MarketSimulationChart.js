@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   Line,
   XAxis,
@@ -6,7 +6,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Scatter,
   ComposedChart
 } from 'recharts';
 import './MarketSimulationChart.css';
@@ -17,7 +16,7 @@ const MarketSimulationChart = ({ chartData }) => {
     '#FF6B6B', // Red
     '#4ECDC4', // Teal
     '#FFE66D', // Yellow
-    '#A8E6CF', // Mint
+    '#A8E6CF', // Mint Green
     '#FF8B94', // Pink
     '#C7CEEA', // Lavender
     '#95E1D3', // Aqua
@@ -27,34 +26,25 @@ const MarketSimulationChart = ({ chartData }) => {
   ];
 
   const processedData = useMemo(() => {
-    if (!chartData || chartData.length === 0) return { chartPoints: [], agents: [], agentColorMap: {} };
+    if (!chartData || chartData.length === 0) return { chartPoints: [], agents: [], agentColorMap: {}, priceAxisId: 'price', portfolioAxisId: 'portfolio' };
 
-    // Extract all unique agents from trades
+    // Extract all unique agents from portfolio data
     const agentSet = new Set();
     chartData.forEach(tick => {
-      tick.trades?.forEach(trade => {
-        if (trade.agent && !trade.agent.startsWith('Liquidity_')) {
-          // Clean up agent name (remove generated_algo_ prefix)
-          const cleanName = trade.agent.replace('generated_algo_', '');
-          agentSet.add(cleanName);
-        }
-      });
+      if (tick.agent_portfolios) {
+        Object.keys(tick.agent_portfolios).forEach(agent => {
+          agentSet.add(agent);
+        });
+      }
     });
 
-    const agents = Array.from(agentSet);
+    const agents = Array.from(agentSet).filter(agent => !agent.startsWith('Liquidity_'));
     const agentColorMap = {};
     agents.forEach((agent, idx) => {
       agentColorMap[agent] = agentColors[idx % agentColors.length];
     });
 
-    // Calculate price range for offset calculation
-    const prices = chartData.map(d => d.price).filter(p => p > 0);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice;
-    const offset = priceRange * 0.05; // 5% offset for buy/sell markers
-
-    // Process each tick
+    // Process each tick to build chart data
     const chartPoints = chartData.map(tick => {
       const point = {
         tick: tick.tick,
@@ -63,35 +53,21 @@ const MarketSimulationChart = ({ chartData }) => {
         trades: tick.trades || []
       };
 
-      // For each agent, create buy/sell data points
-      agents.forEach(agent => {
-        const agentTrades = tick.trades?.filter(t => {
-          const cleanName = t.agent?.replace('generated_algo_', '');
-          return cleanName === agent;
-        }) || [];
-
-        const buyTrades = agentTrades.filter(t => t.side === 'BUY' || t.side === 'buy');
-        const sellTrades = agentTrades.filter(t => t.side === 'SELL' || t.side === 'sell');
-
-        // Position buy orders above the price line
-        if (buyTrades.length > 0) {
-          const totalVolume = buyTrades.reduce((sum, t) => sum + (t.quantity || 0), 0);
-          point[`${agent}_buy`] = tick.price + offset;
-          point[`${agent}_buy_volume`] = totalVolume;
-        }
-
-        // Position sell orders below the price line
-        if (sellTrades.length > 0) {
-          const totalVolume = sellTrades.reduce((sum, t) => sum + (t.quantity || 0), 0);
-          point[`${agent}_sell`] = tick.price - offset;
-          point[`${agent}_sell_volume`] = totalVolume;
-        }
-      });
+      // Add portfolio value for each agent
+      if (tick.agent_portfolios) {
+        agents.forEach(agent => {
+          if (tick.agent_portfolios[agent]) {
+            point[`${agent}_value`] = tick.agent_portfolios[agent].value;
+            point[`${agent}_cash`] = tick.agent_portfolios[agent].cash;
+            point[`${agent}_stock`] = tick.agent_portfolios[agent].stock;
+          }
+        });
+      }
 
       return point;
     });
 
-    return { chartPoints, agents, agentColorMap };
+    return { chartPoints, agents, agentColorMap, priceAxisId: 'price', portfolioAxisId: 'portfolio' };
   }, [chartData]);
 
   if (!chartData || chartData.length === 0) {
@@ -105,60 +81,71 @@ const MarketSimulationChart = ({ chartData }) => {
     );
   }
 
-  const { chartPoints, agents, agentColorMap } = processedData;
+  const { chartPoints, agents, agentColorMap, priceAxisId, portfolioAxisId } = processedData;
 
-  // Calculate price range for Y-axis
+  // Calculate price range for left Y-axis
   const prices = chartPoints.map(d => d.price).filter(p => p > 0);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
   const priceRange = maxPrice - minPrice;
-  const yAxisMin = Math.floor(minPrice - priceRange * 0.15);
-  const yAxisMax = Math.ceil(maxPrice + priceRange * 0.15);
+  const priceYAxisMin = Math.floor(minPrice - priceRange * 0.1);
+  const priceYAxisMax = Math.ceil(maxPrice + priceRange * 0.1);
 
-  // Custom tooltip to show trade details
+  // Calculate portfolio value range for right Y-axis
+  const allPortfolioValues = [];
+  chartPoints.forEach(point => {
+    agents.forEach(agent => {
+      const value = point[`${agent}_value`];
+      if (value !== undefined && value > 0) {
+        allPortfolioValues.push(value);
+      }
+    });
+  });
+
+  const minPortfolio = Math.min(...allPortfolioValues, 10000);
+  const maxPortfolio = Math.max(...allPortfolioValues, 10000);
+  const portfolioRange = maxPortfolio - minPortfolio;
+  const portfolioYAxisMin = Math.floor(minPortfolio - portfolioRange * 0.1);
+  const portfolioYAxisMax = Math.ceil(maxPortfolio + portfolioRange * 0.1);
+
+  // Custom tooltip to show agent details
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
 
-      // Get all trades for this tick grouped by agent
-      const tradesByAgent = {};
-      data.trades?.forEach(trade => {
-        if (!trade.agent || trade.agent.startsWith('Liquidity_')) return;
-        const cleanName = trade.agent.replace('generated_algo_', '');
-        if (!tradesByAgent[cleanName]) {
-          tradesByAgent[cleanName] = [];
-        }
-        tradesByAgent[cleanName].push(trade);
-      });
-
       return (
         <div className="custom-tooltip">
-          <p className="tooltip-tick">Tick {data.tick}</p>
-          <p className="tooltip-price">Market Price: ${data.price?.toFixed(2)}</p>
+          <p className="tooltip-tick"><strong>Tick {data.tick}</strong></p>
+          <p className="tooltip-price"><strong>Market Price: ${data.price?.toFixed(2)}</strong></p>
+          <div className="tooltip-divider"></div>
 
-          {Object.keys(tradesByAgent).length > 0 && (
-            <div className="tooltip-trades">
-              <p className="tooltip-trades-title">Agent Activity:</p>
-              {Object.entries(tradesByAgent).map(([agent, trades]) => {
-                const buyVolume = trades.filter(t => t.side === 'BUY' || t.side === 'buy').reduce((sum, t) => sum + (t.quantity || 0), 0);
-                const sellVolume = trades.filter(t => t.side === 'SELL' || t.side === 'sell').reduce((sum, t) => sum + (t.quantity || 0), 0);
+          {agents.map(agent => {
+            const value = data[`${agent}_value`];
+            const cash = data[`${agent}_cash`];
+            const stock = data[`${agent}_stock`];
 
-                return (
-                  <div key={agent} className="agent-trade-group">
-                    <p className="agent-name" style={{ color: agentColorMap[agent] }}>
-                      {agent}:
-                    </p>
-                    {buyVolume > 0 && (
-                      <p className="tooltip-buy">  ↑ BUY: {buyVolume} shares</p>
-                    )}
-                    {sellVolume > 0 && (
-                      <p className="tooltip-sell">  ↓ SELL: {sellVolume} shares</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+            if (value !== undefined) {
+              const initialValue = 10000; // Initial portfolio value
+              const roi = ((value - initialValue) / initialValue * 100).toFixed(2);
+              const roiColor = roi >= 0 ? '#4CAF50' : '#f44336';
+
+              return (
+                <div key={agent} className="agent-tooltip-group">
+                  <p className="agent-name" style={{ color: agentColorMap[agent], fontWeight: 'bold' }}>
+                    {agent}
+                  </p>
+                  <p className="tooltip-detail">  Value: ${value.toFixed(2)}</p>
+                  <p className="tooltip-detail" style={{ color: roiColor }}>
+                    ROI: {roi >= 0 ? '+' : ''}{roi}%
+                  </p>
+                  <p className="tooltip-detail-small">
+                    Cash: ${cash?.toFixed(2)} | Stock: {stock}
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })}
         </div>
       );
     }
@@ -168,14 +155,14 @@ const MarketSimulationChart = ({ chartData }) => {
   // Custom legend
   const renderLegend = () => {
     return (
-      <div className="chart-legend-agents">
-        <div className="legend-item-price">
-          <span className="legend-line-black"></span> Market Price
+      <div className="chart-legend-multi">
+        <div className="legend-item-price-thick">
+          <span className="legend-line-black-thick"></span> Market Price
         </div>
         {agents.map(agent => (
-          <div key={agent} className="legend-item-agent">
+          <div key={agent} className="legend-item-agent-line">
             <span
-              className="legend-dot-agent"
+              className="legend-line-agent"
               style={{ backgroundColor: agentColorMap[agent] }}
             ></span>
             {agent}
@@ -186,69 +173,92 @@ const MarketSimulationChart = ({ chartData }) => {
   };
 
   return (
-    <div className="market-simulation-chart">
+    <div className="market-simulation-chart-enhanced">
       <div className="chart-header">
-        <h3>📈 Live Market Simulation</h3>
+        <h3>📈 Live Market Simulation - Agent Performance</h3>
         {renderLegend()}
       </div>
-      <ResponsiveContainer width="100%" height={450}>
+      <ResponsiveContainer width="100%" height={650}>
         <ComposedChart
           data={chartPoints}
-          margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+          margin={{ top: 20, right: 80, left: 20, bottom: 30 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+
+          {/* X-Axis */}
           <XAxis
             dataKey="tick"
             stroke="#ffffff"
             tick={{ fill: '#ffffff', fontSize: 12 }}
-            label={{ value: 'Tick', position: 'insideBottom', offset: -10, fill: '#ffffff' }}
+            label={{ value: 'Tick Number', position: 'insideBottom', offset: -15, fill: '#ffffff' }}
           />
+
+          {/* Left Y-Axis (Market Price) */}
           <YAxis
-            domain={[yAxisMin, yAxisMax]}
-            stroke="#ffffff"
+            yAxisId={priceAxisId}
+            orientation="left"
+            domain={[priceYAxisMin, priceYAxisMax]}
+            stroke="#000000"
             tick={{ fill: '#ffffff', fontSize: 12 }}
-            label={{ value: 'Price ($)', angle: -90, position: 'insideLeft', fill: '#ffffff' }}
+            label={{
+              value: 'Market Price ($)',
+              angle: -90,
+              position: 'insideLeft',
+              fill: '#ffffff',
+              style: { fontWeight: 'bold' }
+            }}
           />
+
+          {/* Right Y-Axis (Portfolio Value) */}
+          <YAxis
+            yAxisId={portfolioAxisId}
+            orientation="right"
+            domain={[portfolioYAxisMin, portfolioYAxisMax]}
+            stroke="#4CAF50"
+            tick={{ fill: '#ffffff', fontSize: 12 }}
+            label={{
+              value: 'Portfolio Value ($)',
+              angle: 90,
+              position: 'insideRight',
+              fill: '#ffffff',
+              style: { fontWeight: 'bold' }
+            }}
+          />
+
           <Tooltip content={<CustomTooltip />} />
 
-          {/* Black price line for market price */}
+          {/* Market price line (black, thick) */}
           <Line
+            yAxisId={priceAxisId}
             type="monotone"
             dataKey="price"
             stroke="#000000"
-            strokeWidth={3}
+            strokeWidth={4}
             dot={false}
+            name="Market Price"
             animationDuration={300}
           />
 
-          {/* Scatter points for each agent's buy and sell orders */}
+          {/* Agent portfolio value lines (colored) */}
           {agents.map(agent => (
-            <React.Fragment key={agent}>
-              {/* Buy orders (above the line) */}
-              <Scatter
-                dataKey={`${agent}_buy`}
-                fill={agentColorMap[agent]}
-                shape="triangle"
-                r={7}
-                name={`${agent} Buy`}
-              />
-
-              {/* Sell orders (below the line) */}
-              <Scatter
-                dataKey={`${agent}_sell`}
-                fill={agentColorMap[agent]}
-                shape="triangle"
-                r={7}
-                name={`${agent} Sell`}
-                style={{ transform: 'rotate(180deg)' }}
-              />
-            </React.Fragment>
+            <Line
+              key={agent}
+              yAxisId={portfolioAxisId}
+              type="monotone"
+              dataKey={`${agent}_value`}
+              stroke={agentColorMap[agent]}
+              strokeWidth={2.5}
+              dot={false}
+              name={agent}
+              animationDuration={300}
+            />
           ))}
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="chart-stats">
+
+      <div className="chart-stats-enhanced">
         <div className="stat-item">
-          <span className="stat-label">Current Price:</span>
+          <span className="stat-label">Market Price:</span>
           <span className="stat-value">${chartPoints[chartPoints.length - 1]?.price?.toFixed(2) || '0.00'}</span>
         </div>
         <div className="stat-item">
@@ -263,6 +273,14 @@ const MarketSimulationChart = ({ chartData }) => {
           <span className="stat-label">Price Range:</span>
           <span className="stat-value">${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}</span>
         </div>
+        {agents.length > 0 && chartPoints.length > 0 && (
+          <div className="stat-item">
+            <span className="stat-label">Portfolio Range:</span>
+            <span className="stat-value">
+              ${minPortfolio.toFixed(0)} - ${maxPortfolio.toFixed(0)}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
