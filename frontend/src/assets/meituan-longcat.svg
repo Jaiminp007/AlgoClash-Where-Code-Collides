@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Longcat">
-  <rect width="64" height="64" rx="12" fill="#FFD166"/>
-  <path d="M24 18h16v28H24z" fill="#fff"/>
-  <circle cx="28" cy="24" r="2" fill="#000"/>
-  <circle cx="36" cy="24" r="2" fill="#000"/>
-  <rect x="30" y="28" width="4" height="2" fill="#000"/>
-</svg>

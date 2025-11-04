@@ -135,10 +135,14 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
             progress_callback(50, f"Algorithm generation error: {e}")
         raise
     
-    return run_market_simulation(symbol, progress_callback)
+    return run_market_simulation(symbol, progress_callback, allowed_models=selected_agents)
 
-def run_market_simulation(symbol, progress_callback=None):
-    """Run the market simulation part"""
+def run_market_simulation(symbol, progress_callback=None, allowed_models: list[str] | None = None, tick_callback=None):
+    """Run the market simulation part
+    allowed_models: Optional list of model IDs to include (e.g., 'anthropic/claude-haiku-4.5').
+    When provided, only algorithms with matching sanitized filenames will be loaded.
+    tick_callback: Optional callback function called on each tick with (tick_num, tick_data, trades)
+    """
     if progress_callback:
         progress_callback(65, "Preparing stock chart...")
     
@@ -161,8 +165,9 @@ def run_market_simulation(symbol, progress_callback=None):
     print("\n🏦 STEP 3: Starting Market Simulation")
     print("-" * 40)
     
-    # Create tick generator for simulation with faster processing
-    tick_src = YFinanceTickGenerator(symbol=symbol, period="1d", interval="1m").stream(sleep_seconds=0.1)  # Reduced sleep
+    # Create tick generator with MORE DATA for better signals
+    # Using 5 days of 1-minute data = ~1950 ticks available (5 days × 6.5 hours × 60 min)
+    tick_src = YFinanceTickGenerator(symbol=symbol, period="5d", interval="1m").stream(sleep_seconds=0.01)  # 5 days of data
 
     # Discover generated algorithm modules
     base_gen = Path(__file__).resolve().parent / "generate_algo"
@@ -194,13 +199,31 @@ def run_market_simulation(symbol, progress_callback=None):
 
     # Discover any generated_algo_*.py files in both locations
     discovered = list(base_gen.glob("generated_algo_*.py")) + list(base_open.glob("generated_algo_*.py"))
-    
+
+    # If a subset of models is specified, filter to only those files
+    allowed_stems = None
+    if allowed_models:
+        def _sanitize(name: str) -> str:
+            return name.replace('/', '_').replace('-', '_').replace(':', '_').replace('.', '_')
+        allowed_stems = {f"generated_algo_{_sanitize(m)}" for m in allowed_models}
+        print(f"🎯 Filtering algorithms for {len(allowed_models)} models:")
+        for m in allowed_models:
+            print(f"  - {m} → {_sanitize(m)}")
+        print(f"📋 Expected stems: {allowed_stems}")
+
     # Deduplicate by name
     seen = set()
     algo_modules = []
     for p in discovered:
         if p.name in seen:
+            print(f"⏭️ Skipping duplicate: {p.name}")
             continue
+        if allowed_stems is not None:
+            if p.stem not in allowed_stems:
+                print(f"🚫 Filtering out (not in allowed list): {p.stem}")
+                continue
+            else:
+                print(f"✅ Including: {p.stem}")
         seen.add(p.name)
         algo_modules.append(p)
 
@@ -244,30 +267,30 @@ def run_market_simulation(symbol, progress_callback=None):
     # Create simulation with ORDER BOOK ENABLED and faster processing
     from market.market_simulation import SimulationConfig
     config = SimulationConfig(
-        max_ticks=60,
-        tick_sleep=0.01,  # 10ms between ticks for speed
+        max_ticks=500,  # DRAMATICALLY INCREASED: 5x original = more opportunities
+        tick_sleep=0.005,  # 5ms between ticks for speed
         log_trades=True,
-        log_orders=True,  # Enable order logging to see what's happening
+        log_orders=False,  # Disable for performance with 500 ticks
         enable_order_book=True,  # ENABLE ORDER BOOK for proper matching
         initial_cash=10000.0,
-        initial_stock=5,
+        initial_stock=0,  # CHANGED: Start with cash only for clearer ROI
     mm_initial_stock=150,
         # Enable margin and short selling to increase volume/ROE dispersion
         allow_negative_cash=True,
-        cash_borrow_limit=20000.0,
+        cash_borrow_limit=40000.0,  # INCREASED: 4x initial cash leverage
         allow_short=True,
-    max_short_shares=50,
+    max_short_shares=150,  # INCREASED: Can short 1.5x more shares
         # Expire unfilled limit orders each tick to free reservations
         order_ttl_ticks=1
     )
-    
-    sim = MarketSimulation(agents, config)
+
+    sim = MarketSimulation(agents, config, tick_callback=tick_callback)
 
     # Run the simulation
     try:
         if progress_callback:
             progress_callback(90, "Running market simulation...")
-        results = sim.run(ticks=tick_src, max_ticks=60, log=True)
+        results = sim.run(ticks=tick_src, max_ticks=500, log=True)  # INCREASED to 500 ticks
         if progress_callback:
             progress_callback(95, "Calculating final results...")
     except KeyboardInterrupt:
@@ -292,11 +315,13 @@ def run_market_simulation(symbol, progress_callback=None):
                 continue
             initial = getattr(sim.agent_manager, 'initial_values', {}).get(name, 10000.0)
             final_val = pf.cash + pf.stock * max(sim.last_price, 0.0)
-            roi_val = 0.0 if initial == 0 else (final_val - initial) / initial * 100.0
+            roi_val = 0.0 if initial == 0 else (final_val - initial) / initial
             leaderboard.append({
                 'name': name,
                 'roi': roi_val,
                 'current_value': final_val,
+                'initial_value': initial,
+                'initial_stock': getattr(sim.agent_manager, 'initial_stocks', {}).get(name, 0),
                 'cash': pf.cash,
                 'stock': pf.stock,
                 'trades': len([t for t in sim.agent_manager.trade_records if t.agent_name == name])
@@ -305,25 +330,25 @@ def run_market_simulation(symbol, progress_callback=None):
     leaderboard.sort(key=lambda x: x['roi'], reverse=True)
 
     for row in leaderboard:
-        print(f"{row['name']}: ROI={row['roi']:+.2f}% | Final=${row['current_value']:.2f} (cash=${row['cash']:.2f}, stock={row['stock']})")
+        print(f"{row['name']}: ROI={row['roi']*100:+.2f}% | Final=${row['current_value']:.2f} (cash=${row['cash']:.2f}, stock={row['stock']})")
 
     if leaderboard:
         winner = leaderboard[0]
         print("-" * 60)
-        print(f"🏆 Winner: {winner['name']} with ROI {winner['roi']:+.2f}% and Final ${winner['current_value']:.2f}")
-        
+        print(f"🏆 Winner: {winner['name']} with ROI {winner['roi']*100:+.2f}% and Final ${winner['current_value']:.2f}")
+
         # Show performance analysis
         print("\n📊 PERFORMANCE ANALYSIS:")
         print("-" * 30)
         for i, row in enumerate(leaderboard, 1):
             if i == 1:
-                print(f"🥇 {row['name']}: {row['roi']:+.2f}% ROI")
+                print(f"🥇 {row['name']}: {row['roi']*100:+.2f}% ROI")
             elif i == 2:
-                print(f"🥈 {row['name']}: {row['roi']:+.2f}% ROI")
+                print(f"🥈 {row['name']}: {row['roi']*100:+.2f}% ROI")
             elif i == 3:
-                print(f"🥉 {row['name']}: {row['roi']:+.2f}% ROI")
+                print(f"🥉 {row['name']}: {row['roi']*100:+.2f}% ROI")
             else:
-                print(f"  {i}. {row['name']}: {row['roi']:+.2f}% ROI")
+                print(f"  {i}. {row['name']}: {row['roi']*100:+.2f}% ROI")
     
     # Cleanup: delete generated algorithms after simulation
     try:

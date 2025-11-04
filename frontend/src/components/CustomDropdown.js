@@ -11,6 +11,19 @@ import mistralIcon from '../assets/mistral.png';
 import openaiIcon from '../assets/openai.png';
 import qwenIcon from '../assets/qwen.png';
 import openrouterIcon from '../assets/openrouter.png';
+import agenticaIcon from '../assets/agentica.png';
+import moonshotaiIcon from '../assets/moonshotai.png';
+import nousresearchIcon from '../assets/nousresearch.png';
+import alibabaIcon from '../assets/alibaba.png';
+import arliaiIcon from '../assets/arliai.png';
+import cognitivecomputationsIcon from '../assets/cognitivecomputations.png';
+import meituanIcon from '../assets/meituan.png';
+import microsoftIcon from '../assets/microsoft.png';
+import nvidiaIcon from '../assets/nvidia.png';
+import shisaaiIcon from '../assets/shisaai.png';
+import tencentIcon from '../assets/tencent.png';
+import tngtechIcon from '../assets/tngtech.png';
+import zaiIcon from '../assets/zai.png';
 
 const imageMap = {
   'Anthropic': anthropicIcon,
@@ -21,7 +34,21 @@ const imageMap = {
   'Mistral': mistralIcon,
   'OpenAI': openaiIcon,
   'Qwen': qwenIcon,
-  'OpenRouter': openrouterIcon
+  'OpenRouter': openrouterIcon,
+  'Agentica': agenticaIcon,
+  'Moonshotai': moonshotaiIcon,
+  'Nousresearch': nousresearchIcon,
+  'Alibaba': alibabaIcon,
+  'Arliai': arliaiIcon,
+  'Cognitivecomputations': cognitivecomputationsIcon,
+  'Meituan': meituanIcon,
+  'Microsoft': microsoftIcon,
+  'NVIDIA': nvidiaIcon,
+  'ShisaAI': shisaaiIcon,
+  'Tencent': tencentIcon,
+  'TNGTech': tngtechIcon,
+  'ZAI': zaiIcon,
+  'Z-AI': zaiIcon
 };
 
 const CustomDropdown = ({ agents, selected, onSelect, disabledAgents = new Set() }) => {

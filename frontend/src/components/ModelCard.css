@@ -1,0 +1,241 @@
+.model-card {
+  width: 300px;
+  height: 180px;
+  background: linear-gradient(135deg, rgba(0, 29, 61, 0.95), rgba(0, 53, 102, 0.8));
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid rgba(255, 211, 10, 0.3);
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.model-card-generating {
+  border-color: rgba(255, 211, 10, 0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+              0 0 20px rgba(255, 211, 10, 0.15);
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+                0 0 20px rgba(255, 211, 10, 0.15);
+  }
+  50% {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(255, 211, 10, 0.3);
+  }
+}
+
+.model-card-success {
+  border-color: rgba(0, 255, 127, 0.7);
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+              0 0 20px rgba(0, 255, 127, 0.2);
+}
+
+.model-card-success:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5),
+              0 0 30px rgba(0, 255, 127, 0.3);
+  border-color: rgba(0, 255, 127, 0.9);
+}
+
+.model-card-success:focus-visible {
+  outline: 3px solid #FFD60A;
+  outline-offset: 2px;
+}
+
+.model-card-error {
+  border-color: rgba(255, 77, 77, 0.7);
+  background: linear-gradient(135deg, rgba(139, 0, 0, 0.4), rgba(0, 29, 61, 0.8));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+              0 0 20px rgba(255, 77, 77, 0.2);
+}
+
+.model-card-skipped {
+  border-color: rgba(156, 163, 175, 0.5);
+  background: linear-gradient(135deg, rgba(75, 85, 99, 0.3), rgba(0, 29, 61, 0.6));
+}
+
+.model-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.model-card-name {
+  color: #FFD60A;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  word-break: break-word;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.model-card-status-icon {
+  font-size: 1.5rem;
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.model-card-status-icon.status-generating {
+  color: #FFD60A;
+}
+
+.model-card-status-icon.status-success {
+  color: #00ff7f;
+  font-size: 2rem;
+}
+
+.model-card-status-icon.status-error {
+  color: #ff4d4d;
+}
+
+.model-card-status-icon.status-skipped {
+  color: #9ca3af;
+}
+
+.model-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+
+.shimmer-container {
+  width: 100%;
+  height: 10px;
+  background: rgba(0, 29, 61, 0.8);
+  border-radius: 5px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 12px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.shimmer-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 211, 10, 0.8),
+    rgba(255, 195, 0, 0.8),
+    rgba(255, 211, 10, 0.8),
+    transparent
+  );
+  filter: blur(2px);
+}
+
+.model-card-status-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.model-card-status-text.status-generating {
+  color: #FFD60A;
+}
+
+.model-card-status-text.status-success {
+  color: #00ff7f;
+}
+
+.model-card-status-text.status-error {
+  color: #ff4d4d;
+  font-size: 0.85rem;
+}
+
+.model-card-status-text.status-skipped {
+  color: #9ca3af;
+}
+
+.model-card-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 211, 10, 0.2);
+}
+
+.click-hint {
+  color: rgba(255, 211, 10, 0.7);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.replace-btn {
+  background: linear-gradient(135deg, rgba(255, 77, 77, 0.2), rgba(255, 77, 77, 0.3));
+  color: #ff4d4d;
+  border: 1px solid rgba(255, 77, 77, 0.5);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.replace-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 77, 77, 0.4), rgba(255, 77, 77, 0.5));
+  border-color: #ff4d4d;
+  transform: scale(1.05);
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .model-card {
+    width: 240px;
+    height: 140px;
+  }
+
+  .model-card-name {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .model-card {
+    width: 100%;
+    max-width: 320px;
+    height: 120px;
+  }
+
+  .model-card-name {
+    font-size: 0.95rem;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .model-card {
+    transition: none;
+  }
+
+  .model-card-status-icon {
+    animation: none !important;
+  }
+
+  .shimmer-bar {
+    animation: none !important;
+  }
+}

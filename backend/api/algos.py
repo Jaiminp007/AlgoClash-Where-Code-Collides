@@ -109,7 +109,7 @@ def list_algorithms():
         return jsonify({'error': 'Failed to list algorithms'}), 500
 
 
-@algos_bp.route('/<filename>', methods=['GET'])
+@algos_bp.route('/<path:filename>', methods=['GET'])
 def get_algorithm(filename):
     """
     GET /api/algos/:filename
@@ -135,7 +135,7 @@ def get_algorithm(filename):
         return jsonify({'error': 'Failed to read algorithm'}), 500
 
 
-@algos_bp.route('/<filename>/download', methods=['GET'])
+@algos_bp.route('/<path:filename>/download', methods=['GET'])
 def download_algorithm(filename):
     """
     GET /api/algos/:filename/download
@@ -161,7 +161,7 @@ def download_algorithm(filename):
         return jsonify({'error': 'Failed to download algorithm'}), 500
 
 
-@algos_bp.route('/<filename>', methods=['DELETE'])
+@algos_bp.route('/<path:filename>', methods=['DELETE'])
 def delete_algorithm(filename):
     """
     DELETE /api/algos/:filename
