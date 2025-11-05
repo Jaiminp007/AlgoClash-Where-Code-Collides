@@ -42,6 +42,7 @@ const Dashboard = () => {
   const pollingRef = useRef(null);
   const [showAllAlgos, setShowAllAlgos] = useState(false);
   const [chartData, setChartData] = useState([]);
+  const [savedSimulationData, setSavedSimulationData] = useState(null);
 
   // New state for preview modal
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -50,6 +51,18 @@ const Dashboard = () => {
   // State for replace agent modal
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
   const [modelToReplace, setModelToReplace] = useState(null);
+
+  // Check for saved simulation on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('lastSimulation');
+      if (saved) {
+        setSavedSimulationData(JSON.parse(saved));
+      }
+    } catch (err) {
+      console.error('Failed to load saved simulation:', err);
+    }
+  }, []);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -489,6 +502,19 @@ const Dashboard = () => {
         // Update chart data one last time
         if (data.chart_data) {
           setChartData(data.chart_data);
+          // Save simulation data to localStorage for replay
+          try {
+            const simulationData = {
+              chartData: data.chart_data,
+              results: data.results,
+              timestamp: new Date().toISOString(),
+              stock: selectedStock,
+              agents: Object.values(selectedAgents).filter(Boolean)
+            };
+            localStorage.setItem('lastSimulation', JSON.stringify(simulationData));
+          } catch (err) {
+            console.error('Failed to save simulation data:', err);
+          }
         }
       } else if (data.status === 'error') {
         setSimulationStatus(`Error: ${data.error}`);
@@ -596,6 +622,20 @@ const Dashboard = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleReplaySimulation = () => {
+    if (!savedSimulationData) return;
+
+    // Load the saved simulation data
+    setChartData(savedSimulationData.chartData || []);
+    setSimulationResults(savedSimulationData.results || null);
+    setGenerationPhase('completed');
+    setProgress(100);
+    setSimulationStatus('Replaying saved simulation');
+    setIsRunning(false);
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="dashboard">
       {/* Header Title */}
@@ -647,8 +687,17 @@ const Dashboard = () => {
         </nav>
       </header>
 
-      {/* Top controls below navbar: Stock selector */}
+      {/* Top controls below navbar: Stock selector and Replay button */}
       <div className="top-controls">
+        {savedSimulationData && generationPhase === 'idle' && (
+          <button
+            className="replay-sim-button"
+            onClick={handleReplaySimulation}
+            title={`Replay simulation from ${new Date(savedSimulationData.timestamp).toLocaleString()}`}
+          >
+            🔄 Replay Last Simulation
+          </button>
+        )}
         <div className="stock-selector-group">
           <label htmlFor="stock-select">Stock data:</label>
           {stocks.length > 0 ? (
@@ -719,7 +768,7 @@ const Dashboard = () => {
         </AnimatePresence>
       
         {/* Center Blue Box with conditional content */}
-        <div className={`center-box ${generationPhase === 'generating' ? 'expanded' : ''} ${generationPhase === 'review' ? 'review-expanded' : ''}`}>
+        <div className={`center-box ${generationPhase === 'generating' ? 'expanded' : ''} ${generationPhase === 'review' ? 'review-expanded' : ''} ${generationPhase === 'simulating' || generationPhase === 'completed' ? 'simulation-expanded' : ''}`}>
           {/* Idle/Instructions State */}
           {generationPhase === 'idle' && !isRunning ? (
             <div className="instructions">
@@ -788,7 +837,7 @@ const Dashboard = () => {
 
               {/* Show Market Simulation button when all algorithms are complete */}
               {!isRunning && generatedAlgos.length > 0 && generatedAlgos.every(a => a.status === 'completed' || a.status === 'failed') && (
-                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center' }}>
                   <button
                     className="start-market-sim-button"
                     onClick={handleStartMarketSimulation}
@@ -796,9 +845,6 @@ const Dashboard = () => {
                     title={generatedAlgos.some(a => a.status !== 'completed') ? 'Some algorithms failed. Replace them before continuing.' : 'Start market simulation'}
                   >
                     🚀 START MARKET SIMULATION
-                  </button>
-                  <button className="back-button-review" onClick={handleBack}>
-                    ← Back
                   </button>
                 </div>
               )}

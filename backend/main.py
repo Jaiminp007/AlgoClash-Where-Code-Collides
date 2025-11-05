@@ -11,7 +11,7 @@ import shutil
 # Add the open_router directory to path for imports
 sys.path.append(str(Path(__file__).resolve().parent / "open_router"))
 
-from market.tick_generator import YFinanceTickGenerator, display_stock_chart
+from market.tick_generator import CSVTickGenerator, display_stock_chart
 from market.market_simulation import MarketSimulation
 from market.agent import MarketMakerAgent
 
@@ -165,9 +165,9 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     print("\n🏦 STEP 3: Starting Market Simulation")
     print("-" * 40)
     
-    # Create tick generator with MORE DATA for better signals
-    # Using 5 days of 1-minute data = ~1950 ticks available (5 days × 6.5 hours × 60 min)
-    tick_src = YFinanceTickGenerator(symbol=symbol, period="5d", interval="1m").stream(sleep_seconds=0.01)  # 5 days of data
+    # Create tick generator from CSV files (faster, no network required)
+    # CSV files are pre-downloaded and stored in backend/data/
+    tick_src = CSVTickGenerator(symbol=symbol).stream(sleep_seconds=0.25)  # 0.25s per tick = 15s for 60 ticks
 
     # Discover generated algorithm modules
     base_gen = Path(__file__).resolve().parent / "generate_algo"
@@ -264,13 +264,13 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     if progress_callback:
         progress_callback(85, "Starting market simulation...")
 
-    # Create simulation with ORDER BOOK ENABLED and faster processing
+    # Create simulation with ORDER BOOK ENABLED and slower pacing for visibility
     from market.market_simulation import SimulationConfig
     config = SimulationConfig(
-        max_ticks=500,  # DRAMATICALLY INCREASED: 5x original = more opportunities
-        tick_sleep=0.005,  # 5ms between ticks for speed
+        max_ticks=500,  # 500 ticks at 0.25s each = 125 seconds total
+        tick_sleep=0.25,  # 250ms between ticks for visibility
         log_trades=True,
-        log_orders=False,  # Disable for performance with 500 ticks
+        log_orders=False,  # Disable for cleaner logs
         enable_order_book=True,  # ENABLE ORDER BOOK for proper matching
         initial_cash=10000.0,
         initial_stock=0,  # CHANGED: Start with cash only for clearer ROI
@@ -290,7 +290,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     try:
         if progress_callback:
             progress_callback(90, "Running market simulation...")
-        results = sim.run(ticks=tick_src, max_ticks=500, log=True)  # INCREASED to 500 ticks
+        results = sim.run(ticks=tick_src, max_ticks=60, log=True)  # 60 ticks for 15-second simulation
         if progress_callback:
             progress_callback(95, "Calculating final results...")
     except KeyboardInterrupt:

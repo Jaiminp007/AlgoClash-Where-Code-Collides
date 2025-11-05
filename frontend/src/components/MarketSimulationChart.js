@@ -172,117 +172,176 @@ const MarketSimulationChart = ({ chartData }) => {
     );
   };
 
+  // Get latest tick data for agent stats
+  const latestTick = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1] : null;
+  const displayAgents = agents.slice(0, 6); // Show only first 6 agents
+
+  // Render agent stat cards
+  const renderAgentStatCards = () => {
+    if (!latestTick || displayAgents.length === 0) return null;
+
+    return (
+      <div className="agent-stats-grid">
+        {displayAgents.map((agent) => {
+          const value = latestTick[`${agent}_value`] || 10000;
+          const cash = latestTick[`${agent}_cash`] || 10000;
+          const stock = latestTick[`${agent}_stock`] || 0;
+          const initialValue = 10000;
+          const roi = ((value - initialValue) / initialValue * 100).toFixed(2);
+          const roiColor = roi >= 0 ? '#4CAF50' : '#f44336';
+
+          return (
+            <div key={agent} className="agent-stat-card" style={{ borderLeft: `4px solid ${agentColorMap[agent]}` }}>
+              <div className="agent-stat-header">
+                <div className="agent-stat-name" style={{ color: agentColorMap[agent] }}>
+                  {agent.replace('generated_algo_', '')}
+                </div>
+              </div>
+              <div className="agent-stat-body">
+                <div className="stat-row">
+                  <span className="stat-label-small">ROI</span>
+                  <span className="stat-value-large" style={{ color: roiColor }}>
+                    {roi >= 0 ? '+' : ''}{roi}%
+                  </span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label-small">Cash</span>
+                  <span className="stat-value-medium">${cash.toFixed(2)}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label-small">Stock</span>
+                  <span className="stat-value-medium">{stock}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
-    <div className="market-simulation-chart-enhanced">
+    <>
       <div className="chart-header">
         <h3>📈 Live Market Simulation - Agent Performance</h3>
         {renderLegend()}
       </div>
-      <ResponsiveContainer width="100%" height={650}>
-        <ComposedChart
-          data={chartPoints}
-          margin={{ top: 20, right: 80, left: 20, bottom: 30 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
 
-          {/* X-Axis */}
-          <XAxis
-            dataKey="tick"
-            stroke="#ffffff"
-            tick={{ fill: '#ffffff', fontSize: 12 }}
-            label={{ value: 'Tick Number', position: 'insideBottom', offset: -15, fill: '#ffffff' }}
-          />
+      <div className="market-simulation-layout">
+        {/* Left side: Chart */}
+        <div className="chart-section">
+          <ResponsiveContainer width="100%" height={480}>
+            <ComposedChart
+              data={chartPoints}
+              margin={{ top: 20, right: 80, left: 20, bottom: 30 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
 
-          {/* Left Y-Axis (Market Price) */}
-          <YAxis
-            yAxisId={priceAxisId}
-            orientation="left"
-            domain={[priceYAxisMin, priceYAxisMax]}
-            stroke="#000000"
-            tick={{ fill: '#ffffff', fontSize: 12 }}
-            label={{
-              value: 'Market Price ($)',
-              angle: -90,
-              position: 'insideLeft',
-              fill: '#ffffff',
-              style: { fontWeight: 'bold' }
-            }}
-          />
+              {/* X-Axis */}
+              <XAxis
+                dataKey="tick"
+                stroke="#ffffff"
+                tick={{ fill: '#ffffff', fontSize: 12 }}
+                label={{ value: 'Tick Number', position: 'insideBottom', offset: -15, fill: '#ffffff' }}
+              />
 
-          {/* Right Y-Axis (Portfolio Value) */}
-          <YAxis
-            yAxisId={portfolioAxisId}
-            orientation="right"
-            domain={[portfolioYAxisMin, portfolioYAxisMax]}
-            stroke="#4CAF50"
-            tick={{ fill: '#ffffff', fontSize: 12 }}
-            label={{
-              value: 'Portfolio Value ($)',
-              angle: 90,
-              position: 'insideRight',
-              fill: '#ffffff',
-              style: { fontWeight: 'bold' }
-            }}
-          />
+              {/* Left Y-Axis (Market Price) */}
+              <YAxis
+                yAxisId={priceAxisId}
+                orientation="left"
+                domain={[priceYAxisMin, priceYAxisMax]}
+                stroke="#000000"
+                tick={{ fill: '#ffffff', fontSize: 12 }}
+                label={{
+                  value: 'Market Price ($)',
+                  angle: -90,
+                  position: 'insideLeft',
+                  fill: '#ffffff',
+                  style: { fontWeight: 'bold' }
+                }}
+              />
 
-          <Tooltip content={<CustomTooltip />} />
+              {/* Right Y-Axis (Portfolio Value) */}
+              <YAxis
+                yAxisId={portfolioAxisId}
+                orientation="right"
+                domain={[portfolioYAxisMin, portfolioYAxisMax]}
+                stroke="#4CAF50"
+                tick={{ fill: '#ffffff', fontSize: 12 }}
+                label={{
+                  value: 'Portfolio Value ($)',
+                  angle: 90,
+                  position: 'insideRight',
+                  fill: '#ffffff',
+                  style: { fontWeight: 'bold' }
+                }}
+              />
 
-          {/* Market price line (black, thick) */}
-          <Line
-            yAxisId={priceAxisId}
-            type="monotone"
-            dataKey="price"
-            stroke="#000000"
-            strokeWidth={4}
-            dot={false}
-            name="Market Price"
-            animationDuration={300}
-          />
+              <Tooltip content={<CustomTooltip />} />
 
-          {/* Agent portfolio value lines (colored) */}
-          {agents.map(agent => (
-            <Line
-              key={agent}
-              yAxisId={portfolioAxisId}
-              type="monotone"
-              dataKey={`${agent}_value`}
-              stroke={agentColorMap[agent]}
-              strokeWidth={2.5}
-              dot={false}
-              name={agent}
-              animationDuration={300}
-            />
-          ))}
-        </ComposedChart>
-      </ResponsiveContainer>
+              {/* Market price line (black, thick) */}
+              <Line
+                yAxisId={priceAxisId}
+                type="monotone"
+                dataKey="price"
+                stroke="#000000"
+                strokeWidth={4}
+                dot={false}
+                name="Market Price"
+                animationDuration={300}
+              />
 
-      <div className="chart-stats-enhanced">
-        <div className="stat-item">
-          <span className="stat-label">Market Price:</span>
-          <span className="stat-value">${chartPoints[chartPoints.length - 1]?.price?.toFixed(2) || '0.00'}</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Ticks Processed:</span>
-          <span className="stat-value">{chartPoints.length}</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Active Agents:</span>
-          <span className="stat-value">{agents.length}</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Price Range:</span>
-          <span className="stat-value">${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}</span>
-        </div>
-        {agents.length > 0 && chartPoints.length > 0 && (
-          <div className="stat-item">
-            <span className="stat-label">Portfolio Range:</span>
-            <span className="stat-value">
-              ${minPortfolio.toFixed(0)} - ${maxPortfolio.toFixed(0)}
-            </span>
+              {/* Agent portfolio value lines (colored) */}
+              {agents.map(agent => (
+                <Line
+                  key={agent}
+                  yAxisId={portfolioAxisId}
+                  type="monotone"
+                  dataKey={`${agent}_value`}
+                  stroke={agentColorMap[agent]}
+                  strokeWidth={2.5}
+                  dot={false}
+                  name={agent}
+                  animationDuration={300}
+                />
+              ))}
+            </ComposedChart>
+          </ResponsiveContainer>
+
+          <div className="chart-stats-enhanced">
+            <div className="stat-item">
+              <span className="stat-label">Market Price:</span>
+              <span className="stat-value">${chartPoints[chartPoints.length - 1]?.price?.toFixed(2) || '0.00'}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Ticks Processed:</span>
+              <span className="stat-value">{chartPoints.length}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Active Agents:</span>
+              <span className="stat-value">{agents.length}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Price Range:</span>
+              <span className="stat-value">${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}</span>
+            </div>
+            {agents.length > 0 && chartPoints.length > 0 && (
+              <div className="stat-item">
+                <span className="stat-label">Portfolio Range:</span>
+                <span className="stat-value">
+                  ${minPortfolio.toFixed(0)} - ${maxPortfolio.toFixed(0)}
+                </span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Right side: Agent stat cards */}
+        <div className="stats-section">
+          {renderAgentStatCards()}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

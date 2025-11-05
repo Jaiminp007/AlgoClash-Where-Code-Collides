@@ -1,6 +1,6 @@
 """
-Yahoo Finance Tick Generator for Market Simulation
-Provides real-time and historical stock price data for trading simulation.
+Tick Generator for Market Simulation
+Provides stock price data for trading simulation from CSV files or Yahoo Finance.
 """
 
 import yfinance as yf
@@ -10,13 +10,14 @@ import time
 import threading
 from typing import Iterator, Optional, Dict, Any, List
 from datetime import datetime, timedelta
+from pathlib import Path
 import random
 
 
 class TickData:
     """Represents a single market tick with price and volume data."""
-    
-    def __init__(self, timestamp: datetime, open_price: float, high: float, 
+
+    def __init__(self, timestamp: datetime, open_price: float, high: float,
                  low: float, close: float, volume: int, symbol: str):
         self.timestamp = timestamp
         self.open = open_price
@@ -25,9 +26,238 @@ class TickData:
         self.close = close
         self.volume = volume
         self.symbol = symbol
-        
+
     def __repr__(self):
         return f"TickData({self.symbol}, {self.close:.2f}, {self.timestamp})"
+
+
+class CSVTickGenerator:
+    """
+    Generates market ticks from pre-downloaded CSV files.
+    Faster and works offline - no need for live yfinance downloads.
+    """
+
+    def __init__(self, symbol: str, data_dir: Optional[str] = None):
+        """
+        Initialize the CSV tick generator.
+
+        Args:
+            symbol: Stock symbol (e.g., 'AAPL')
+            data_dir: Directory containing CSV files (defaults to backend/data)
+        """
+        self.symbol = symbol.upper()
+        self.data: Optional[pd.DataFrame] = None
+        self.current_index = 0
+
+        # Default to backend/data directory
+        if data_dir is None:
+            backend_dir = Path(__file__).resolve().parent.parent
+            data_dir = backend_dir / "data"
+        else:
+            data_dir = Path(data_dir)
+
+        self.csv_path = data_dir / f"{self.symbol}_data.csv"
+        self._load_csv()
+
+    def _load_csv(self):
+        """Load data from CSV file."""
+        try:
+            if not self.csv_path.exists():
+                raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
+
+            print(f"📈 Loading {self.symbol} data from CSV: {self.csv_path}")
+            self.data = pd.read_csv(self.csv_path)
+
+            # Convert Date/Datetime column to datetime
+            date_col = None
+            for col in ['Date', 'Datetime', 'date', 'datetime', 'timestamp', 'Timestamp']:
+                if col in self.data.columns:
+                    date_col = col
+                    break
+
+            if date_col:
+                self.data[date_col] = pd.to_datetime(self.data[date_col])
+                self.data.set_index(date_col, inplace=True)
+            else:
+                # If no date column, create a synthetic timestamp
+                print("⚠️ No date column found, creating synthetic timestamps")
+                start_date = datetime.now() - timedelta(days=len(self.data))
+                self.data.index = pd.date_range(start=start_date, periods=len(self.data), freq='1min')
+
+            # Ensure required columns exist (case-insensitive)
+            required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+            col_mapping = {}
+            for req_col in required_cols:
+                for col in self.data.columns:
+                    if col.lower() == req_col.lower():
+                        col_mapping[col] = req_col
+                        break
+
+            if col_mapping:
+                self.data.rename(columns=col_mapping, inplace=True)
+
+            # Verify all required columns exist
+            missing_cols = [col for col in required_cols if col not in self.data.columns]
+            if missing_cols:
+                raise ValueError(f"Missing required columns: {missing_cols}")
+
+            if self.data.empty:
+                raise ValueError(f"CSV file is empty: {self.csv_path}")
+
+            print(f"✅ Successfully loaded {len(self.data)} data points from CSV")
+            print(f"📅 Date range: {self.data.index[0]} to {self.data.index[-1]}")
+
+        except Exception as e:
+            print(f"❌ Error loading CSV for {self.symbol}: {e}")
+            print(f"⚠️ Falling back to yfinance for {self.symbol}")
+            # Fallback to yfinance if CSV fails
+            self._fetch_from_yfinance()
+
+    def _fetch_from_yfinance(self):
+        """Fallback: fetch data from yfinance if CSV is not available."""
+        try:
+            print(f"📈 Fetching {self.symbol} from yfinance as fallback...")
+            ticker = yf.Ticker(self.symbol)
+            self.data = ticker.history(period="5d", interval="1m")
+
+            if self.data.empty:
+                raise ValueError(f"No data available for {self.symbol}")
+
+            print(f"✅ Fetched {len(self.data)} data points from yfinance")
+
+        except Exception as e:
+            print(f"❌ yfinance fallback also failed: {e}")
+            self._create_dummy_data()
+
+    def _create_dummy_data(self):
+        """Create dummy data as last resort."""
+        print("🔧 Creating dummy data as last resort...")
+        dates = pd.date_range(start=datetime.now() - timedelta(days=5), periods=1000, freq='1min')
+        base_price = 150.0
+
+        price_changes = np.random.normal(0, 0.1, len(dates))
+        prices = [base_price]
+
+        for change in price_changes[1:]:
+            new_price = max(prices[-1] + change, 1.0)
+            prices.append(new_price)
+
+        self.data = pd.DataFrame({
+            'Open': prices,
+            'High': [p + random.uniform(0, 0.5) for p in prices],
+            'Low': [p - random.uniform(0, 0.5) for p in prices],
+            'Close': prices,
+            'Volume': np.random.randint(1000, 10000, len(dates))
+        }, index=dates)
+
+    def get_latest_price(self) -> float:
+        """Get the most recent price."""
+        if self.data is None or self.data.empty:
+            return 150.0
+        return float(self.data['Close'].iloc[-1])
+
+    def get_historical_data(self, days: int = 30) -> pd.DataFrame:
+        """Get historical data for the last N days."""
+        if self.data is None or self.data.empty:
+            return pd.DataFrame()
+
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        if hasattr(self.data.index, 'tz') and self.data.index.tz is not None:
+            import pytz
+            if self.data.index.tz:
+                cutoff_date = cutoff_date.replace(tzinfo=pytz.UTC)
+                cutoff_date = cutoff_date.astimezone(self.data.index.tz)
+            else:
+                cutoff_date = cutoff_date.replace(tzinfo=pytz.UTC)
+
+        return self.data[self.data.index >= cutoff_date].copy()
+
+    def stream(self, sleep_seconds: float = 1.0, replay_speed: float = 1.0) -> Iterator[TickData]:
+        """
+        Stream tick data from CSV.
+
+        Args:
+            sleep_seconds: Time to sleep between ticks
+            replay_speed: Speed multiplier (1.0 = normal)
+
+        Yields:
+            TickData objects with market data
+        """
+        if self.data is None or self.data.empty:
+            print("❌ No data available for streaming")
+            return
+
+        print(f"🚀 Starting CSV tick stream for {self.symbol}")
+        print(f"⚡ Stream settings: sleep={sleep_seconds}s, speed={replay_speed}x")
+
+        self.current_index = 0
+
+        while self.current_index < len(self.data):
+            row = self.data.iloc[self.current_index]
+            timestamp = self.data.index[self.current_index]
+
+            tick = TickData(
+                timestamp=timestamp,
+                open_price=float(row['Open']),
+                high=float(row['High']),
+                low=float(row['Low']),
+                close=float(row['Close']),
+                volume=int(row['Volume']),
+                symbol=self.symbol
+            )
+
+            yield tick
+
+            self.current_index += 1
+
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds / replay_speed)
+
+    def get_tick_at_index(self, index: int) -> Optional[TickData]:
+        """Get a specific tick by index."""
+        if self.data is None or self.data.empty or index >= len(self.data):
+            return None
+
+        row = self.data.iloc[index]
+        timestamp = self.data.index[index]
+
+        return TickData(
+            timestamp=timestamp,
+            open_price=float(row['Open']),
+            high=float(row['High']),
+            low=float(row['Low']),
+            close=float(row['Close']),
+            volume=int(row['Volume']),
+            symbol=self.symbol
+        )
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about the loaded data."""
+        if self.data is None or self.data.empty:
+            return {"error": "No data available"}
+
+        return {
+            "symbol": self.symbol,
+            "total_ticks": len(self.data),
+            "date_range": {
+                "start": str(self.data.index[0]),
+                "end": str(self.data.index[-1])
+            },
+            "price_stats": {
+                "min": float(self.data['Close'].min()),
+                "max": float(self.data['Close'].max()),
+                "mean": float(self.data['Close'].mean()),
+                "std": float(self.data['Close'].std()),
+                "current": float(self.data['Close'].iloc[-1])
+            },
+            "volume_stats": {
+                "min": int(self.data['Volume'].min()),
+                "max": int(self.data['Volume'].max()),
+                "mean": float(self.data['Volume'].mean()),
+                "total": int(self.data['Volume'].sum())
+            }
+        }
 
 
 class YFinanceTickGenerator:

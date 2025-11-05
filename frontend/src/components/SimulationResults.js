@@ -12,6 +12,10 @@ const SimulationResults = () => {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(0);
   const [currentTask, setCurrentTask] = useState('');
+  const [showAlgoModal, setShowAlgoModal] = useState(false);
+  const [selectedAlgo, setSelectedAlgo] = useState(null);
+  const [algoCode, setAlgoCode] = useState('');
+  const [algoLoading, setAlgoLoading] = useState(false);
 
   useEffect(() => {
     if (!simulationId) {
@@ -50,6 +54,36 @@ const SimulationResults = () => {
 
   const handleBack = () => {
     navigate('/');
+  };
+
+  const handleViewAlgorithm = async (agentName) => {
+    setSelectedAlgo(agentName);
+    setShowAlgoModal(true);
+    setAlgoLoading(true);
+    setAlgoCode('');
+
+    try {
+      const apiBase = process.env.REACT_APP_API_BASE_URL || '';
+      const filename = `${agentName}.py`;
+      const response = await fetch(`${apiBase}/api/algos/${filename}`);
+
+      if (response.ok) {
+        const code = await response.text();
+        setAlgoCode(code);
+      } else {
+        setAlgoCode('// Algorithm code not found');
+      }
+    } catch (err) {
+      setAlgoCode(`// Error loading algorithm: ${err.message}`);
+    } finally {
+      setAlgoLoading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowAlgoModal(false);
+    setSelectedAlgo(null);
+    setAlgoCode('');
   };
 
   if (loading) {
@@ -149,6 +183,13 @@ const SimulationResults = () => {
                   </span>
                 </div>
               </div>
+              <button
+                className="view-algo-btn"
+                onClick={() => handleViewAlgorithm(agent.name)}
+                title="View Algorithm Code"
+              >
+                View Algorithm
+              </button>
             </div>
           ))}
         </div>
@@ -159,6 +200,37 @@ const SimulationResults = () => {
           Back to Dashboard
         </button>
       </div>
+
+      {/* Algorithm View Modal */}
+      {showAlgoModal && (
+        <div className="algo-modal-overlay" onClick={handleCloseModal}>
+          <div className="algo-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="algo-modal-header">
+              <h3>Algorithm Code - {selectedAlgo}</h3>
+              <button className="modal-close-btn" onClick={handleCloseModal}>
+                ×
+              </button>
+            </div>
+            <div className="algo-modal-body">
+              {algoLoading ? (
+                <div className="algo-loading">
+                  <div className="spinner"></div>
+                  <p>Loading algorithm...</p>
+                </div>
+              ) : (
+                <pre className="algo-code">
+                  <code>{algoCode}</code>
+                </pre>
+              )}
+            </div>
+            <div className="algo-modal-footer">
+              <button className="modal-btn" onClick={handleCloseModal}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

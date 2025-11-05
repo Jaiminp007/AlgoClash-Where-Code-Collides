@@ -64,6 +64,33 @@
   transform: translateY(0);
 }
 
+/* Replay Simulation button */
+.replay-sim-button {
+  background: linear-gradient(135deg, #00C864, #00A854);
+  color: #ffffff;
+  border: 1px solid #00C864;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 200, 100, 0.3);
+  white-space: nowrap;
+}
+
+.replay-sim-button:hover {
+  background: linear-gradient(135deg, #00E874, #00C864);
+  border-color: #00E874;
+  box-shadow: 0 0 20px rgba(0, 200, 100, 0.5);
+  transform: translateY(-2px);
+}
+
+.replay-sim-button:active {
+  transform: translateY(0);
+}
+
 .dashboard-nav {
   display: flex;
   gap: 2rem;
@@ -167,14 +194,23 @@
 
 /* Expanded center box during generation phase */
 .center-box.expanded {
-  width: 75%;
+  width: 80%;
   height: 95%;
   box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
 }
 
 /* Extra expanded center box during review phase */
 .center-box.review-expanded {
-  width: 85%;
+  width: 80%;
+  height: 95%;
+  max-height: calc(100vh - 180px);
+  box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
+  margin-bottom: 40px;
+}
+
+/* Simulation expanded center box - wider for market simulation */
+.center-box.simulation-expanded {
+  width: 90%;
   height: 95%;
   max-height: calc(100vh - 180px);
   box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
@@ -238,7 +274,7 @@
 .progress-panel {
   color: #ffffff;
   font-family: 'Rajdhani', sans-serif;
-  padding: 32px;
+  padding: 24px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -268,8 +304,8 @@
 }
 
 .progress-panel h2 {
-  margin: 0 0 20px 0;
-  font-size: 1.8rem;
+  margin: 0 0 16px 0;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #FFD60A;
   text-align: center;
@@ -290,8 +326,36 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00b4d8, #90e0ef);
-  transition: width 0.4s ease;
+  background: #00C864;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(0, 200, 100, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .current-task {
@@ -697,10 +761,11 @@
   }
 
   .center-box {
-    width: 80%;
+    width: 85%;
     height: 45%;
   }
 
+  .center-box.expanded,
   .center-box.review-expanded {
     width: 90%;
     height: 85%;
@@ -745,12 +810,13 @@
   }
 
   .center-box {
-    width: 90%;
+    width: 95%;
     height: 30%;
   }
 
+  .center-box.expanded,
   .center-box.review-expanded {
-    width: 95%;
+    width: 98%;
     height: 80%;
     max-height: calc(100vh - 140px);
   }
@@ -1236,5 +1302,165 @@
 
   .model-card {
     transition: opacity 0.2s ease !important;
+  }
+}
+
+/* ======================
+   MARKET SIMULATION CONTAINER STYLES
+   ====================== */
+
+/* Full-width market simulation container (outside center-box) */
+.market-simulation-container {
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 0 40px;
+  position: relative;
+  z-index: 5;
+}
+
+/* Market simulation header with title and tick counter */
+.market-sim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+/* Market simulation title */
+.market-sim-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #FFD60A;
+  margin: 0;
+  text-shadow: 0 3px 10px rgba(255, 214, 10, 0.4);
+}
+
+/* Tick counter badge */
+.tick-counter {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #001d3d;
+  background: linear-gradient(135deg, #FFD60A, #FFC300);
+  padding: 10px 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(255, 214, 10, 0.3);
+  border: 2px solid #FFC300;
+}
+
+/* Progress bar container for market simulation */
+.market-sim-progress {
+  margin-bottom: 24px;
+  padding: 0 20px;
+}
+
+/* Progress status text */
+.progress-status {
+  color: #FFD60A;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* Actions container for back button */
+.market-sim-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
+  padding: 0 20px;
+}
+
+/* Back button for simulation */
+.back-button-sim {
+  background: rgba(255, 211, 10, 0.15);
+  color: #FFD60A;
+  border: 1px solid rgba(255, 211, 10, 0.4);
+  padding: 12px 32px;
+  border-radius: 10px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.back-button-sim:hover {
+  background: #FFD60A;
+  color: #001d3d;
+  border-color: #FFD60A;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 214, 10, 0.4);
+}
+
+.back-button-sim:active {
+  transform: translateY(0);
+}
+
+/* Responsive adjustments for market simulation */
+@media (max-width: 1024px) {
+  .market-simulation-container {
+    padding: 0 24px;
+  }
+
+  .market-sim-title {
+    font-size: 1.8rem;
+  }
+
+  .tick-counter {
+    font-size: 1.2rem;
+    padding: 8px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .market-simulation-container {
+    padding: 0 16px;
+  }
+
+  .market-sim-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .market-sim-title {
+    font-size: 1.6rem;
+  }
+
+  .tick-counter {
+    font-size: 1.1rem;
+    padding: 8px 18px;
+  }
+
+  .market-sim-progress {
+    padding: 0 12px;
+  }
+
+  .market-sim-actions {
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .market-sim-title {
+    font-size: 1.4rem;
+  }
+
+  .tick-counter {
+    font-size: 1rem;
+    padding: 6px 16px;
+  }
+
+  .back-button-sim {
+    width: 100%;
+    padding: 10px 24px;
+    font-size: 1rem;
   }
 }
