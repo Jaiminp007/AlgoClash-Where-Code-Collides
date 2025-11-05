@@ -45,17 +45,19 @@ class MarketSimulation:
     - Portfolio management and performance tracking
     """
     
-    def __init__(self, agents: List[TradingAgent], config: Optional[SimulationConfig] = None):
+    def __init__(self, agents: List[TradingAgent], config: Optional[SimulationConfig] = None, tick_callback=None):
         """
         Initialize the market simulation.
-        
+
         Args:
             agents: List of trading agents to participate
             config: Simulation configuration
+            tick_callback: Optional callback function called on each tick with (tick_num, tick_data, trades)
         """
         self.config = config or SimulationConfig()
         self.agent_manager = AgentManager()
         self.order_book = OrderBook()
+        self.tick_callback = tick_callback
         
         # Add all agents to the manager
         for agent in agents:
@@ -160,8 +162,11 @@ class MarketSimulation:
             try:
                 for agent_name, pf in self.agent_manager.portfolios.items():
                     self.agent_manager.initial_values[agent_name] = pf.cash + (pf.stock * current_price)
-            except Exception:
-                pass
+                    self.agent_manager.initial_stocks[agent_name] = pf.stock
+                    if log and not agent_name.startswith("Liquidity_"):
+                        print(f"📊 {agent_name}: Initial stock={pf.stock}, cash=${pf.cash:.2f}, total=${self.agent_manager.initial_values[agent_name]:.2f}")
+            except Exception as e:
+                print(f"⚠️ Error initializing baseline values: {e}")
         
         if log and self.current_tick % 10 == 0:
             print(f"\\n⏰ Tick {self.current_tick}: {tick_data.symbol} @ ${current_price:.2f}")
@@ -183,6 +188,45 @@ class MarketSimulation:
         self._record_tick_data(tick_data, len(agent_orders))
         # Expire any resting orders at end of tick and release reservations
         self._expire_and_cancel_orders()
+
+        # Call tick callback if provided (for real-time updates to frontend)
+        if self.tick_callback:
+            try:
+                # Get recent trades from this tick
+                recent_trades = []
+                if self.config.enable_order_book:
+                    # Get trades that happened in this tick (last N trades)
+                    all_trades = self.order_book.trades
+                    if all_trades:
+                        # Estimate trades from this tick (simple heuristic)
+                        recent_trades = all_trades[-min(20, len(all_trades)):]
+
+                # Calculate portfolio values for each agent (cash + stock value)
+                agent_portfolios = {}
+                for agent_name, portfolio in self.agent_manager.portfolios.items():
+                    # Skip liquidity providers from chart
+                    if not agent_name.startswith('Liquidity_'):
+                        portfolio_value = portfolio.cash + (portfolio.stock * current_price)
+                        # Clean up agent name (remove generated_algo_ prefix)
+                        clean_name = agent_name.replace('generated_algo_', '')
+                        agent_portfolios[clean_name] = {
+                            'value': portfolio_value,
+                            'cash': portfolio.cash,
+                            'stock': portfolio.stock
+                        }
+
+                self.tick_callback(
+                    self.current_tick,
+                    {
+                        'price': current_price,
+                        'timestamp': tick_data.timestamp,
+                        'volume': tick_data.volume,
+                        'agent_portfolios': agent_portfolios  # Add agent portfolio values
+                    },
+                    recent_trades
+                )
+            except Exception as e:
+                print(f"⚠️ Tick callback error: {e}")
         
     def _process_orders_through_book(self, orders: List[Dict[str, Any]], log: bool = True):
         """Process orders through the order book for realistic matching."""
@@ -440,7 +484,7 @@ class MarketSimulation:
             
             leaderboard = self.agent_manager.get_leaderboard(self.last_price)[:5]
             for i, result in enumerate(leaderboard, 1):
-                print(f"{i}. {result['name']}: ROI={result['roi']:+.2f}% | "
+                print(f"{i}. {result['name']}: ROI={result['roi']*100:+.2f}% | "
                       f"Value=${result['current_value']:.2f} | Trades={result['trades']}")
                       
             print("="*60)
@@ -538,5 +582,5 @@ if __name__ == "__main__":
     
     print("\\n🏆 FINAL LEADERBOARD:")
     for i, result in enumerate(results['leaderboard'][:5], 1):
-        print(f"{i}. {result['name']}: ROI={result['roi']:+.2f}% | "
+        print(f"{i}. {result['name']}: ROI={result['roi']*100:+.2f}% | "
               f"Value=${result['current_value']:.2f}")

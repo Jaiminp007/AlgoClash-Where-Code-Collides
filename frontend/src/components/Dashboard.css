@@ -36,31 +36,58 @@
   text-align: left; /* Align subtitle to the left */
 }
 
-/* Preview Algorithms button */
+/* Preview Algorithms button in top-controls */
 .preview-algos-button {
   background: linear-gradient(135deg, #003566, #001d3d);
   color: #FFD60A;
   border: 1px solid #FFD60A;
-  border-radius: 8px;
-  padding: 10px 20px;
+  border-radius: 6px;
+  padding: 8px 16px;
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  margin-left: 40px;
-  box-shadow: 0 0 15px rgba(255, 195, 0, 0.2);
+  box-shadow: 0 0 10px rgba(255, 195, 0, 0.2);
+  white-space: nowrap;
 }
 
 .preview-algos-button:hover {
   background: linear-gradient(135deg, #FFD60A, #FFC300);
   color: #001d3d;
   border-color: #FFC300;
-  box-shadow: 0 0 25px rgba(255, 195, 0, 0.4);
+  box-shadow: 0 0 20px rgba(255, 195, 0, 0.4);
   transform: translateY(-2px);
 }
 
 .preview-algos-button:active {
+  transform: translateY(0);
+}
+
+/* Replay Simulation button */
+.replay-sim-button {
+  background: linear-gradient(135deg, #00C864, #00A854);
+  color: #ffffff;
+  border: 1px solid #00C864;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 200, 100, 0.3);
+  white-space: nowrap;
+}
+
+.replay-sim-button:hover {
+  background: linear-gradient(135deg, #00E874, #00C864);
+  border-color: #00E874;
+  box-shadow: 0 0 20px rgba(0, 200, 100, 0.5);
+  transform: translateY(-2px);
+}
+
+.replay-sim-button:active {
   transform: translateY(0);
 }
 
@@ -98,17 +125,23 @@
   bottom: 0px;
 }
 
-/* Top controls below navbar (right-aligned) */
+/* Top controls below navbar (space-between for button and stock selector) */
 .top-controls {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  padding: 0 30px 0 5px; /* push a bit left, leaving room on the right */
+  padding: 0 30px;
   margin-top: -10px;
   margin-bottom: 10px;
   position: relative;
   z-index: 1000; /* Keep above main surfaces */
+}
+
+.stock-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto; /* push to right when it's the only control */
 }
 
 .top-controls label {
@@ -155,7 +188,33 @@
   z-index: 5; /* Lower than side elements */
   box-shadow: 0 10px 30px rgba(0, 53, 102, 0.3);
   margin-bottom: 70px;
-  overflow: hidden; /* Ensure dropdowns aren't clipped */
+  overflow: visible; /* Changed to visible for model cards */
+  transition: width 0.4s ease, height 0.4s ease, min-height 0.4s ease;
+}
+
+/* Expanded center box during generation phase */
+.center-box.expanded {
+  width: 80%;
+  height: 95%;
+  box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
+}
+
+/* Extra expanded center box during review phase */
+.center-box.review-expanded {
+  width: 80%;
+  height: 95%;
+  max-height: calc(100vh - 180px);
+  box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
+  margin-bottom: 40px;
+}
+
+/* Simulation expanded center box - wider for market simulation */
+.center-box.simulation-expanded {
+  width: 90%;
+  height: 95%;
+  max-height: calc(100vh - 180px);
+  box-shadow: 0 15px 40px rgba(0, 53, 102, 0.5);
+  margin-bottom: 40px;
 }
 
 /* Instructions content inside center box */
@@ -215,17 +274,43 @@
 .progress-panel {
   color: #ffffff;
   font-family: 'Rajdhani', sans-serif;
-  padding: 28px;
+  padding: 24px;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   background: transparent; /* keep center box color visible */
 }
 
+/* Custom scrollbar for progress panel */
+.progress-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.progress-panel::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.progress-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 211, 10, 0.4);
+  border-radius: 4px;
+}
+
+.progress-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 211, 10, 0.6);
+}
+
 .progress-panel h2 {
-  margin: 10px 0 16px 0;
-  font-size: 1.6rem;
+  margin: 0 0 16px 0;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #FFD60A;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(255, 211, 10, 0.3);
+  flex-shrink: 0;
 }
 
 .progress-bar {
@@ -236,17 +321,50 @@
   border-radius: 999px;
   overflow: hidden;
   box-shadow: inset 0 0 8px rgba(0,0,0,0.2);
+  flex-shrink: 0;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00b4d8, #90e0ef);
-  transition: width 0.4s ease;
+  background: #00C864;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(0, 200, 100, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .current-task {
-  margin: 10px 0 16px 0;
+  margin: 12px 0 0 0;
   color: #e6f0ff;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .gen-list {
@@ -446,7 +564,56 @@
   border: 1px solid #003566;
 }
 
-/* Results Container */
+/* Results Overlay and Modal */
+.results-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.results-modal {
+  background: rgba(0, 29, 61, 0.95);
+  border: 2px solid #FFD60A;
+  border-radius: 15px;
+  padding: 0;
+  max-width: 900px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  z-index: 2001;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Legacy results container (keep for compatibility) */
 .results-container {
   position: absolute;
   top: 50%;
@@ -592,29 +759,48 @@
   .dashboard-title {
     font-size: 2.5rem;
   }
-  
+
   .center-box {
-    width: 80%;
-  height: 45%;
+    width: 85%;
+    height: 45%;
   }
-  
+
+  .center-box.expanded,
+  .center-box.review-expanded {
+    width: 90%;
+    height: 85%;
+    max-height: calc(100vh - 160px);
+  }
+
   .side-element {
     width: 200px;
     height: 80px;
     border-radius: 100px;
   }
-  
+
   .left-element {
     left: -100px;
   }
-  
+
   .right-element {
     right: -100px;
   }
-  
+
   .start-button {
     font-size: 1.5rem;
     padding: 12px 40px;
+  }
+
+  .review-panel {
+    padding: 20px;
+  }
+
+  .review-panel h2 {
+    font-size: 1.5rem;
+  }
+
+  .review-subtitle {
+    font-size: 0.95rem;
   }
 }
 
@@ -622,14 +808,659 @@
   .dashboard-title {
     font-size: 2rem;
   }
-  
+
   .center-box {
-    width: 90%;
+    width: 95%;
     height: 30%;
   }
-  
+
+  .center-box.expanded,
+  .center-box.review-expanded {
+    width: 98%;
+    height: 80%;
+    max-height: calc(100vh - 140px);
+  }
+
   .start-button {
     font-size: 1.2rem;
     padding: 10px 30px;
+  }
+
+  .review-panel {
+    padding: 16px;
+  }
+
+  .review-panel h2 {
+    font-size: 1.3rem;
+  }
+
+  .start-market-sim-button {
+    font-size: 1.2rem;
+    padding: 14px 24px;
+  }
+}
+
+/* ======================
+   GENERATION PHASE STYLES
+   ====================== */
+
+/* Better status icons for generation */
+.gen-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border-left: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.gen-item.generating {
+  background: rgba(255, 211, 10, 0.1);
+  border-left-color: #FFD30A;
+  animation: pulse 2s infinite;
+}
+
+.gen-item.done {
+  background: rgba(0, 200, 100, 0.05);
+  border-left-color: #00C864;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.status-icon {
+  font-size: 1.2rem;
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-icon.generating {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.gen-item .model-name {
+  flex: 1;
+  color: #FFD60A;
+  font-weight: 500;
+}
+
+.generating-label {
+  color: #FFC300;
+  font-size: 0.85rem;
+  font-weight: 600;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ======================
+   REVIEW PANEL STYLES
+   ====================== */
+
+.review-panel {
+  padding: 32px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.review-panel h2 {
+  color: #00C864;
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 200, 100, 0.3);
+  flex-shrink: 0;
+}
+
+.review-subtitle {
+  color: #FFD60A;
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.review-actions-header {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.algorithms-container,
+.generated-algos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 12px;
+  min-height: 0; /* Important for flex scrolling */
+}
+
+.algo-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 211, 10, 0.2);
+  transition: all 0.3s ease;
+}
+
+.algo-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #FFD30A;
+  transform: translateX(4px);
+}
+
+.algo-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.algo-number {
+  background: #003566;
+  color: #FFD60A;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 40px;
+  text-align: center;
+}
+
+.algo-model {
+  color: #FFD60A;
+  font-weight: 600;
+  font-size: 1rem;
+  flex: 1;
+}
+
+.algo-size {
+  color: #888;
+  font-size: 0.85rem;
+  margin-right: 12px;
+}
+
+.preview-btn {
+  background: rgba(255, 211, 10, 0.15);
+  color: #FFD60A;
+  border: 1px solid rgba(255, 211, 10, 0.4);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.preview-btn:hover {
+  background: #FFD60A;
+  color: #001d3d;
+  border-color: #FFD60A;
+  transform: scale(1.05);
+}
+
+.start-market-sim-button {
+  width: 100%;
+  background: linear-gradient(135deg, #FFD60A, #FFC300);
+  color: #001d3d;
+  border: 1px solid #FFC300;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(255, 214, 10, 0.3);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.start-market-sim-button:hover {
+  background: linear-gradient(135deg, #FFE566, #FFD60A);
+  border-color: #FFD60A;
+  box-shadow: 0 6px 30px rgba(255, 214, 10, 0.5);
+  transform: translateY(-2px);
+}
+
+.start-market-sim-button:active {
+  transform: translateY(0);
+}
+
+.back-button-review {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFD60A;
+  border: 1px solid rgba(255, 211, 10, 0.3);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.back-button-review:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #FFD60A;
+}
+
+/* Scrollbar for algo list and algorithms container */
+.algorithms-container::-webkit-scrollbar,
+.generated-algos-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.algorithms-container::-webkit-scrollbar-track,
+.generated-algos-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.algorithms-container::-webkit-scrollbar-thumb,
+.generated-algos-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 211, 10, 0.5);
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.algorithms-container::-webkit-scrollbar-thumb:hover,
+.generated-algos-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 211, 10, 0.7);
+  box-shadow: 0 0 6px rgba(255, 211, 10, 0.4);
+}
+
+/* ======================
+   MORPHING ANIMATION
+   ====================== */
+
+/* Add morphing class to side circles when animation starts */
+.side-circle.morphing {
+  animation: morphToDroplet 0.6s ease-in forwards;
+}
+
+@keyframes morphToDroplet {
+  0% {
+    border-radius: 50%;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    border-radius: 50% 50% 30% 30%;
+    transform: translateY(-50%) scale(0.9, 1.1);
+  }
+  100% {
+    border-radius: 50% 50% 0% 0%;
+    transform: translateY(-50%) scale(0.7, 1.2);
+    opacity: 0.8;
+  }
+}
+
+/* Create droplet particles that travel */
+.droplet-particle {
+  position: fixed;
+  width: 40px;
+  height: 60px;
+  background: linear-gradient(180deg, #FFD60A, #FFC300);
+  border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0;
+  box-shadow: 0 0 20px rgba(255, 211, 10, 0.6);
+  filter: blur(1px);
+}
+
+.droplet-particle.animating {
+  animation: travelToCenter 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes travelToCenter {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(var(--travel-x-mid), var(--travel-y-mid)) scale(0.8) rotate(180deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--travel-x), var(--travel-y)) scale(0.3) rotate(360deg);
+  }
+}
+
+/* ======================
+   MODEL CARDS GRID STYLES
+   ====================== */
+
+.model-cards-grid-container {
+  padding: 24px;
+  width: 100%;
+}
+
+.grid-title {
+  color: #FFD60A;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 24px 0;
+}
+
+.model-cards-grid {
+  position: relative;
+  width: 100%;
+  transition: all 0.4s ease;
+}
+
+/* Scatter layout - absolute positioning */
+.model-cards-grid.scatter-layout {
+  min-height: 400px;
+  position: relative;
+}
+
+/* Grid layout - CSS Grid */
+.model-cards-grid.grid-layout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  justify-items: center;
+  align-items: start;
+}
+
+/* Model cards inside progress panel */
+.model-cards-in-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 32px;
+  padding: 0 0 16px 0;
+  justify-items: center;
+  align-items: start;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Responsive grid layouts */
+@media (max-width: 1400px) {
+  .model-cards-grid.grid-layout {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .model-cards-in-progress {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .model-cards-grid.grid-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .model-cards-in-progress {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .model-cards-grid-container {
+    padding: 16px;
+  }
+
+  .grid-title {
+    font-size: 1.3rem;
+  }
+}
+
+/* Disabled state for Market Simulation button */
+.start-market-sim-button:disabled {
+  background: linear-gradient(135deg, rgba(156, 163, 175, 0.3), rgba(107, 114, 128, 0.3));
+  color: rgba(255, 214, 10, 0.4);
+  border-color: rgba(156, 163, 175, 0.3);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.start-market-sim-button:disabled:hover {
+  transform: none;
+  background: linear-gradient(135deg, rgba(156, 163, 175, 0.3), rgba(107, 114, 128, 0.3));
+}
+
+/* Accessibility - live region for status updates */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Reduced motion support for animations */
+@media (prefers-reduced-motion: reduce) {
+  .side-circle.morphing {
+    animation: none;
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+  }
+
+  .droplet-particle.animating {
+    animation: none;
+    opacity: 0;
+  }
+
+  .algorithm-card {
+    animation: simpleFadeIn 0.4s ease forwards;
+  }
+
+  @keyframes simpleFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Reduce Framer Motion animations */
+  .model-cards-grid,
+  .center-box {
+    transition: opacity 0.2s ease !important;
+  }
+
+  .model-card {
+    transition: opacity 0.2s ease !important;
+  }
+}
+
+/* ======================
+   MARKET SIMULATION CONTAINER STYLES
+   ====================== */
+
+/* Full-width market simulation container (outside center-box) */
+.market-simulation-container {
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 0 40px;
+  position: relative;
+  z-index: 5;
+}
+
+/* Market simulation header with title and tick counter */
+.market-sim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+/* Market simulation title */
+.market-sim-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #FFD60A;
+  margin: 0;
+  text-shadow: 0 3px 10px rgba(255, 214, 10, 0.4);
+}
+
+/* Tick counter badge */
+.tick-counter {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #001d3d;
+  background: linear-gradient(135deg, #FFD60A, #FFC300);
+  padding: 10px 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(255, 214, 10, 0.3);
+  border: 2px solid #FFC300;
+}
+
+/* Progress bar container for market simulation */
+.market-sim-progress {
+  margin-bottom: 24px;
+  padding: 0 20px;
+}
+
+/* Progress status text */
+.progress-status {
+  color: #FFD60A;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* Actions container for back button */
+.market-sim-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
+  padding: 0 20px;
+}
+
+/* Back button for simulation */
+.back-button-sim {
+  background: rgba(255, 211, 10, 0.15);
+  color: #FFD60A;
+  border: 1px solid rgba(255, 211, 10, 0.4);
+  padding: 12px 32px;
+  border-radius: 10px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.back-button-sim:hover {
+  background: #FFD60A;
+  color: #001d3d;
+  border-color: #FFD60A;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 214, 10, 0.4);
+}
+
+.back-button-sim:active {
+  transform: translateY(0);
+}
+
+/* Responsive adjustments for market simulation */
+@media (max-width: 1024px) {
+  .market-simulation-container {
+    padding: 0 24px;
+  }
+
+  .market-sim-title {
+    font-size: 1.8rem;
+  }
+
+  .tick-counter {
+    font-size: 1.2rem;
+    padding: 8px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .market-simulation-container {
+    padding: 0 16px;
+  }
+
+  .market-sim-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .market-sim-title {
+    font-size: 1.6rem;
+  }
+
+  .tick-counter {
+    font-size: 1.1rem;
+    padding: 8px 18px;
+  }
+
+  .market-sim-progress {
+    padding: 0 12px;
+  }
+
+  .market-sim-actions {
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .market-sim-title {
+    font-size: 1.4rem;
+  }
+
+  .tick-counter {
+    font-size: 1rem;
+    padding: 6px 16px;
+  }
+
+  .back-button-sim {
+    width: 100%;
+    padding: 10px 24px;
+    font-size: 1rem;
   }
 }

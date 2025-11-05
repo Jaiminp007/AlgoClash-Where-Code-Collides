@@ -21,11 +21,11 @@ class Portfolio:
         return self.cash + (self.stock * current_price)
         
     def get_roi(self, initial_value: float, current_price: float) -> float:
-        """Calculate Return on Investment percentage."""
+        """Calculate Return on Investment as decimal ratio (e.g., 0.5 = 50% gain)."""
         if initial_value <= 0:
             return 0.0
         current_value = self.get_total_value(current_price)
-        return ((current_value - initial_value) / initial_value) * 100.0
+        return (current_value - initial_value) / initial_value
 
 
 @dataclass
@@ -257,6 +257,7 @@ class AgentManager:
         self.agents: Dict[str, TradingAgent] = {}
         self.portfolios: Dict[str, Portfolio] = {}
         self.initial_values: Dict[str, float] = {}
+        self.initial_stocks: Dict[str, int] = {}
         self.trade_records: List[TradeRecord] = []
         # Margin/short selling settings (can be configured by simulation)
         self.allow_negative_cash: bool = False
@@ -369,6 +370,8 @@ class AgentManager:
                 'name': agent_name,
                 'roi': roi,
                 'current_value': current_value,
+                'initial_value': initial_value,
+                'initial_stock': self.initial_stocks.get(agent_name, 0),
                 'cash': portfolio.cash,
                 'stock': portfolio.stock,
                 'trades': len([t for t in self.trade_records if t.agent_name == agent_name])
@@ -444,5 +447,5 @@ if __name__ == "__main__":
     
     leaderboard = manager.get_leaderboard(test_price)
     for i, result in enumerate(leaderboard, 1):
-        print(f"{i}. {result['name']}: ROI={result['roi']:+.2f}% | "
+        print(f"{i}. {result['name']}: ROI={result['roi']*100:+.2f}% | "
               f"Value=${result['current_value']:.2f} | Trades={result['trades']}")

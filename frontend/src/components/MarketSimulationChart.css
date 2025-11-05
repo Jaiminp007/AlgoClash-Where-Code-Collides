@@ -1,0 +1,532 @@
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0;
+}
+
+.chart-header h3 {
+  color: #00C864;
+  font-size: 1.4rem;
+  margin: 0;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  text-shadow: 0 3px 10px rgba(0, 200, 100, 0.4);
+}
+
+/* Multi-line legend for agent portfolios */
+.chart-legend-multi {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.legend-item-price-thick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+}
+
+.legend-line-black-thick {
+  width: 24px;
+  height: 3px;
+  background: #000000;
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.legend-item-agent-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+
+.legend-item-agent-line:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.legend-line-agent {
+  width: 24px;
+  height: 2px;
+  border-radius: 2px;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* Original legend styles */
+.chart-legend-agents {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.legend-item-price {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.legend-line-black {
+  width: 30px;
+  height: 3px;
+  background: #000000;
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.legend-item-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-family: 'Rajdhani', sans-serif;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.legend-dot-agent {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* Chart placeholder */
+.chart-placeholder {
+  background: linear-gradient(135deg, rgba(0, 29, 61, 0.9), rgba(0, 53, 102, 0.9));
+  border-radius: 12px;
+  padding: 80px 24px;
+  margin: 20px 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 211, 10, 0.3);
+  min-height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-loading {
+  text-align: center;
+}
+
+.chart-spinner {
+  width: 70px;
+  height: 70px;
+  border: 5px solid rgba(255, 211, 10, 0.2);
+  border-top: 5px solid #FFD60A;
+  border-radius: 50%;
+  margin: 0 auto 24px;
+  animation: chartSpin 1s linear infinite;
+}
+
+@keyframes chartSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.chart-loading p {
+  color: #FFD60A;
+  font-size: 1.2rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Enhanced custom tooltip */
+.custom-tooltip {
+  background: rgba(0, 29, 61, 0.98);
+  border: 2px solid rgba(0, 200, 100, 0.6);
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7);
+  font-family: 'Rajdhani', sans-serif;
+  max-width: 350px;
+}
+
+.tooltip-tick {
+  color: #FFD60A;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin: 0 0 10px 0;
+}
+
+.tooltip-price {
+  color: #00C864;
+  font-weight: 700;
+  font-size: 1.3rem;
+  margin: 0 0 12px 0;
+}
+
+.tooltip-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 12px 0;
+}
+
+/* Agent tooltip groups */
+.agent-tooltip-group {
+  margin: 10px 0;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.agent-tooltip-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.agent-name {
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 0 6px 0;
+}
+
+.tooltip-detail {
+  color: #ffffff;
+  font-size: 0.95rem;
+  margin: 4px 0;
+  padding-left: 4px;
+}
+
+.tooltip-detail-small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  margin: 4px 0;
+  padding-left: 4px;
+}
+
+.tooltip-buy {
+  color: #00FF88;
+  font-size: 0.95rem;
+  margin: 4px 0;
+}
+
+.tooltip-sell {
+  color: #FF4444;
+  font-size: 0.95rem;
+  margin: 4px 0;
+}
+
+/* Enhanced chart stats */
+.chart-stats-enhanced {
+  display: flex;
+  justify-content: space-around;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chart-stats {
+  display: flex;
+  justify-content: space-around;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 100px;
+}
+
+.stat-label {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.75rem;
+  font-family: 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.stat-value {
+  color: #00C864;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: 'Rajdhani', sans-serif;
+  text-shadow: 0 2px 6px rgba(0, 200, 100, 0.3);
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .chart-header h3 {
+    font-size: 1.5rem;
+  }
+
+  .chart-legend-multi {
+    gap: 12px;
+  }
+
+  .legend-item-agent-line {
+    font-size: 0.85rem;
+    padding: 4px 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0;
+  }
+
+  .chart-header h3 {
+    font-size: 1.3rem;
+  }
+
+  .chart-legend-multi {
+    gap: 10px;
+  }
+
+  .legend-item-price-thick {
+    font-size: 0.9rem;
+    padding: 5px 12px;
+  }
+
+  .legend-item-agent-line {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+  }
+
+  .chart-stats-enhanced {
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .stat-item {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .custom-tooltip {
+    max-width: 280px;
+    padding: 12px 16px;
+  }
+}
+
+/* Animation for lines appearing */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.recharts-line {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Smooth transitions for hover effects */
+.recharts-tooltip-wrapper {
+  transition: all 0.2s ease;
+}
+
+/* Highlight effect on line hover */
+.recharts-line:hover {
+  filter: brightness(1.2);
+  stroke-width: 3.5px !important;
+}
+
+/* Market Simulation Layout - Left/Right Split */
+.market-simulation-layout {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 0;
+}
+
+.chart-section {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stats-section {
+  width: 480px;
+  flex-shrink: 0;
+}
+
+/* Agent Stats Grid - 2x3 layout */
+.agent-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  height: 400px;
+}
+
+/* Agent Stat Card */
+.agent-stat-card {
+  background: linear-gradient(135deg, rgba(0, 29, 61, 0.95), rgba(0, 53, 102, 0.95));
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(10px);
+}
+
+.agent-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  border-color: rgba(0, 200, 100, 0.4);
+}
+
+.agent-stat-header {
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.agent-stat-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.stat-label-small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.6rem;
+  font-family: 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+}
+
+.stat-value-large {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: 'Rajdhani', sans-serif;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.stat-value-medium {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'Rajdhani', sans-serif;
+  color: #ffffff;
+}
+
+/* Responsive adjustments for market simulation layout */
+@media (max-width: 1400px) {
+  .stats-section {
+    width: 350px;
+  }
+
+  .agent-stat-card {
+    padding: 8px;
+  }
+
+  .agent-stat-name {
+    font-size: 0.75rem;
+  }
+
+  .stat-value-large {
+    font-size: 1rem;
+  }
+
+  .stat-value-medium {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .market-simulation-layout {
+    flex-direction: column;
+  }
+
+  .stats-section {
+    width: 100%;
+  }
+
+  .agent-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    height: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .agent-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .agent-stats-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+}
