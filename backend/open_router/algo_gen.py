@@ -463,7 +463,7 @@ RECOMMENDED APPROACH - Stateful Trading Logic:
 
 OPTIONAL: If you MUST use market data (NOT recommended):
    - Use yfinance with AGGRESSIVE caching: yf.download(ticker, period="5d", interval="1m", progress=False)
-   - Store in module-level variable: _cached_data = {}
+   - Store in module-level variable: _cached_data =
    - Check cache FIRST before downloading
    - WARNING: This adds latency and is discouraged for this simulation
 
