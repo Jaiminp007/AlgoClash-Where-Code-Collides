@@ -44,7 +44,10 @@
   "Anthropic": [
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-sonnet-4.5",
-    "anthropic/claude-opus-4.1"
+    "anthropic/claude-opus-4.1",
+    "anthropic/claude-opus-4",
+    "anthropic/claude-sonnet-4",
+    "anthropic/claude-3.7-sonnet"
   ],
   "Nousresearch": [
     "nousresearch/deephermes-3-llama-3-8b-preview:free"
@@ -67,7 +70,8 @@
     "tencent/hunyuan-a13b-instruct:free"
   ],
   "NVIDIA": [
-    "nvidia/nemotron-nano-9b-v2:free"
+    "nvidia/nemotron-nano-9b-v2:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free"
   ],
   "Alibaba": [
     "alibaba/tongyi-deepresearch-30b-a3b:free"
@@ -88,5 +92,9 @@
   "OpenRouter": [
     "openrouter/sonoma-sky-alpha",
     "openrouter/sonoma-dusk-alpha"
+  ],
+  "Minimax": [
+    "minimax/minimax-m2:free"
   ]
+  
 }

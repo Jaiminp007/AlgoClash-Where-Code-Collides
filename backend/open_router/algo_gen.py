@@ -61,68 +61,42 @@ def _wrap_code_if_missing_func(code: str) -> str:
 
 
 def _generate_fallback_code(ticker: str, model_id: str) -> str:
-    """Produce a safe, diversified minimal algorithm using yfinance when API is unavailable.
-    Diversification is seeded by model_id to yield different windows/thresholds per agent.
+    """Produce a safe, diversified stateful algorithm when API is unavailable.
+    Uses position-based logic without fetching market data.
     """
     seed_int = int(hashlib.md5(model_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed_int)
-    # Vary period/interval and windows
-    period = rng.choice(['5d', '10d', '30d'])
-    interval = rng.choice(['1m', '5m', '15m'])
-    fast = rng.choice([5, 7, 9, 11])
-    slow = rng.choice([15, 21, 27, 33, 45])
-    # Ensure slow > fast
-    if slow <= fast:
-        slow = fast + rng.choice([8, 12, 20])
-    buy_mult = 1.0 + rng.uniform(0.0003, 0.0012)  # 3-12 bps
-    sell_mult = 1.0 - rng.uniform(0.0003, 0.0012)
-    use_rsi = rng.choice([True, False])
-    rsi_win = rng.choice([7, 10, 14, 21])
-    cache_name = f"_fb_{hashlib.md5((model_id+'-cache').encode()).hexdigest()[:6]}"
+
+    # Generate diverse parameters for each agent
+    cycle_length = rng.choice([5, 10, 15, 20, 25, 30])
+    buy_threshold = rng.randint(2, 8)
+    sell_threshold = rng.randint(10, 20)
+    target_position = rng.choice([5, 10, 15, 20])
+
+    state_var = f"_state_{hashlib.md5(model_id.encode()).hexdigest()[:6]}"
 
     code = [
-        "import yfinance as yf",
-        "import numpy as np",
-        f"{cache_name} = {{}}",
+        f"{state_var} = {{'cycle': 0, 'target': {target_position}, 'direction': 1}}",
         "",
         "def execute_trade(ticker, cash_balance, shares_held):",
-        f"    global {cache_name}",
+        f"    global {state_var}",
         "    try:",
-        f"        if ticker not in {cache_name}:",
-        f"            {cache_name}[ticker] = yf.download(ticker, period='{period}', interval='{interval}', progress=False)",
-        f"        df = {cache_name}.get(ticker)",
-        "        if df is None or len(df) < 20:",
-        "            return 'HOLD'",
-        "        close_prices = df['Close'].values.flatten()",
-        "        n = len(close_prices)",
-        "        if n < max(20, %d):" % (max(fast, slow)),
-        "            return 'HOLD'",
-        f"        ma_fast = float(np.mean(close_prices[-{fast}:]))",
-        f"        ma_slow = float(np.mean(close_prices[-{slow}:]))",
-        "        if np.isnan(ma_fast) or np.isnan(ma_slow):",
-        "            return 'HOLD'",
-    ]
-
-    if use_rsi:
-        code += [
-            f"        # RSI filter",
-            f"        if n < {rsi_win}:",
-            "            return 'HOLD'",
-            f"        deltas = np.diff(close_prices[-({rsi_win}+1):])",
-            "        ups = np.sum(deltas[deltas > 0])",
-            "        downs = -np.sum(deltas[deltas < 0])",
-            "        if downs <= 0:",
-            "            return 'HOLD'",
-            "        rs = ups / downs",
-            "        rsi = 100.0 - (100.0 / (1.0 + rs))",
-            "        if np.isnan(rsi):",
-            "            return 'HOLD'",
-        ]
-
-    code += [
-        f"        if ma_fast > ma_slow * {buy_mult:.6f}",
+        f"        {state_var}['cycle'] += 1",
+        f"        cycle = {state_var}['cycle']",
+        "",
+        "        # Position-based strategy without market data",
+        f"        if cycle % {cycle_length} == 0:",
+        f"            {state_var}['direction'] *= -1",
+        "",
+        f"        target = {state_var}['target'] * {state_var}['direction']",
+        "",
+        f"        if shares_held < {buy_threshold} and cash_balance > 1000:",
         "            return 'BUY'",
-        f"        if ma_fast < ma_slow * {sell_mult:.6f}",
+        f"        elif shares_held > {sell_threshold}:",
+        "            return 'SELL'",
+        "        elif shares_held < target:",
+        "            return 'BUY'",
+        "        elif shares_held > target:",
         "            return 'SELL'",
         "        return 'HOLD'",
         "    except Exception:",
@@ -453,29 +427,63 @@ Output format:
     - Code must be immediately executable
 
 ═══════════════════════════════════════════════════════════════════════════════
-DATA SOURCING REQUIREMENTS
+EXECUTION ENVIRONMENT & DATA ACCESS
 ═══════════════════════════════════════════════════════════════════════════════
 
-1. Use yfinance library to fetch real historical market data
-   - Import: import yfinance as yf
-   - Download syntax: yf.download(ticker, period="...", interval="...", progress=False)
-   - CRITICAL: Always set progress=False to suppress output
+IMPORTANT: Your function will be called repeatedly during a live market simulation.
+You will ONLY receive these parameters:
+    - ticker: The stock symbol being traded
+    - cash_balance: Your current cash position (can be negative with margin)
+    - shares_held: Your current stock position (can be negative with short selling)
 
-2. Choose period and interval appropriate for your strategy:
-   - Short-term: period="5d" to "10d", interval="1m" to "5m"
-   - Medium-term: period="1mo" to "3mo", interval="15m" to "1h"
-   - Long-term: period="6mo" to "1y", interval="1h" to "1d"
-   - Multi-timeframe: Fetch multiple datasets if needed
+CRITICAL CONSTRAINTS:
+    - You do NOT receive current market price as a parameter
+    - You do NOT have access to live price feeds during execution
+    - The simulation engine handles all market data internally
+    - Your function will be called 60+ times during a 15-second simulation
 
-3. Implement caching to avoid redundant API calls:
-   - Use a module-level dictionary (global variable)
-   - Cache the downloaded dataframe per ticker
-   - Only download once per ticker per session
+RECOMMENDED APPROACH - Stateful Trading Logic:
 
-4. Data handling best practices:
-   - Extract close prices: close_prices = df['Close'].values.flatten()
-   - You can also use: df['Open'], df['High'], df['Low'], df['Volume']
-   - Always verify data availability before processing
+1. Use module-level variables to track state across calls:
+   - Example: _call_count = 0, _last_position = 0, _trades_made = 0
+   - Track your trading history and position changes
+   - Implement time-based or position-based strategies
+
+2. Make decisions based on your portfolio state:
+   - If shares_held > X and profitable, consider taking profit (SELL)
+   - If shares_held < Y, consider building position (BUY)
+   - Use cash_balance to gauge your buying power
+   - Track position changes to infer market movement
+
+3. Pattern-based strategies without price data:
+   - Cycle through BUY/HOLD/SELL based on internal counters
+   - Use probabilistic/random elements (with seed for reproducibility)
+   - Implement mean-reversion via position sizing
+   - Use portfolio rotation strategies
+
+OPTIONAL: If you MUST use market data (NOT recommended):
+   - Use yfinance with AGGRESSIVE caching: yf.download(ticker, period="5d", interval="1m", progress=False)
+   - Store in module-level variable: _cached_data = {}
+   - Check cache FIRST before downloading
+   - WARNING: This adds latency and is discouraged for this simulation
+
+Example of good stateful approach:
+    _trade_cycle = 0
+    _position_target = 0
+
+    def execute_trade(ticker, cash_balance, shares_held):
+        global _trade_cycle, _position_target
+        _trade_cycle += 1
+
+        # Cycle through positions
+        if _trade_cycle % 20 == 0:
+            _position_target = 10 if shares_held < 5 else -5
+
+        if shares_held < _position_target:
+            return "BUY"
+        elif shares_held > _position_target:
+            return "SELL"
+        return "HOLD"
 
 ═══════════════════════════════════════════════════════════════════════════════
 ERROR HANDLING (CRITICAL)
@@ -544,6 +552,43 @@ Technical indicators library (use as needed):
    - Volatility: ATR, Bollinger Bands, Standard Deviation
    - Volume: OBV, VWAP, Volume Rate of Change
    - Custom: Design your own derived metrics
+
+CRITICAL: You must CALCULATE any technical indicators you want to use. Example calculations:
+
+   RSI calculation:
+       deltas = np.diff(close_prices)
+       ups = np.maximum(deltas, 0)
+       downs = np.abs(np.minimum(deltas, 0))
+       avg_gain = np.mean(ups[-14:])
+       avg_loss = np.mean(downs[-14:])
+       rs = avg_gain / avg_loss if avg_loss > 0 else 0
+       rsi = 100 - (100 / (1 + rs))
+
+   SMA calculation:
+       sma_20 = np.mean(close_prices[-20:])
+
+   EMA calculation:
+       alpha = 2 / (period + 1)
+       ema = close_prices[0]
+       for price in close_prices[1:]:
+           ema = alpha * price + (1 - alpha) * ema
+
+   Bollinger Bands:
+       sma = np.mean(close_prices[-20:])
+       std = np.std(close_prices[-20:])
+       upper_band = sma + (2 * std)
+       lower_band = sma - (2 * std)
+
+   ATR (Average True Range):
+       high = df['High'].values.flatten()
+       low = df['Low'].values.flatten()
+       close = df['Close'].values.flatten()
+       tr = np.maximum(high[1:] - low[1:],
+                      np.abs(high[1:] - close[:-1]),
+                      np.abs(low[1:] - close[:-1]))
+       atr = np.mean(tr[-14:])
+
+   NEVER assume indicators are pre-calculated in the dataframe
 
 Performance targets:
    - Aim for 30-50% actionable decisions (BUY or SELL)
