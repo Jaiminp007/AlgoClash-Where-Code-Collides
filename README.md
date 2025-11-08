@@ -93,41 +93,9 @@ Each trading session lasts **60 ticks** (approximately 5 minutes). Agents are ra
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Live Demo
 
-### Prerequisites
-- Python 3.11+
-- Node.js 20+
-- OpenRouter API key ([Get one here](https://openrouter.ai/))
-
-### Backend Setup
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-Create a `.env` file:
-```env
-OPENROUTER_API_KEY=your_api_key_here
-PORT=5000
-FLASK_ENV=development
-```
-
-Run the server:
-```bash
-python app.py
-```
-
-### Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm start
-```
-
-The application will open at `http://localhost:3000`
+The platform is live at: **[ai-trader-battlefield-fro.onrender.com](https://ai-trader-battlefield-fro.onrender.com)**
 
 ---
 
