@@ -1064,9 +1064,63 @@ def _pick_best_accessible_id(selected_id: str, normalized_accessible: set[str]) 
                 return cand
     return None
 
+def _has_meaningful_implementation(code: str) -> bool:
+    """Check if the code has meaningful implementation beyond just a function signature.
+    Returns False if the function is empty, only contains pass, or has no body.
+    """
+    if not code or 'def execute_trade' not in code:
+        return False
+
+    import re
+    # Find the function definition line
+    match = re.search(r'def\s+execute_trade\s*\([^)]*\)\s*:', code)
+    if not match:
+        return False
+
+    # Get everything after the function definition
+    func_start = match.end()
+    func_body = code[func_start:].strip()
+
+    # Check if there's any content after the function signature
+    if not func_body:
+        return False
+
+    # Split into lines and check for meaningful content
+    lines = func_body.splitlines()
+    code_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        # Skip empty lines, comments, docstrings
+        if not stripped or stripped.startswith('#'):
+            continue
+        # Stop at next function/class definition (end of our function)
+        if stripped.startswith('def ') or stripped.startswith('class '):
+            break
+        code_lines.append(stripped)
+
+    # If no code lines found, function is empty
+    if not code_lines:
+        return False
+
+    # Check if the only content is 'pass' or docstring
+    meaningful_lines = [l for l in code_lines if l != 'pass' and not (l.startswith('"""') or l.startswith("'''"))]
+
+    # Need at least one meaningful line (import, assignment, return, etc.)
+    if len(meaningful_lines) == 0:
+        return False
+
+    # Check for at least one return statement or some logic
+    code_text = '\n'.join(code_lines)
+    has_return = 'return' in code_text
+    has_logic = any(keyword in code_text for keyword in ['if', 'for', 'while', '=', 'import'])
+
+    return has_return or has_logic
+
 def _extract_execute_trade_code(raw_content: str) -> str | None:
     """Attempt to extract a clean Python function containing execute_trade from model output.
     Handles content with markdown fences, extra prose, or multiple blocks.
+    Validates that extracted code has meaningful implementation.
     """
     if not isinstance(raw_content, str):
         return None
@@ -1089,9 +1143,9 @@ def _extract_execute_trade_code(raw_content: str) -> str | None:
     except Exception:
         blocks = []
 
-    # Prefer a block with execute_trade
+    # Prefer a block with execute_trade and meaningful implementation
     for b in blocks:
-        if 'def execute_trade' in b:
+        if 'def execute_trade' in b and _has_meaningful_implementation(b):
             return b.strip()
 
     # 2) If no blocks or no match, try to extract from raw text by finding the function definition
@@ -1107,7 +1161,13 @@ def _extract_execute_trade_code(raw_content: str) -> str | None:
             out.append(ln)
             if re.match(r"^[^\s]", ln) and ln.startswith(('def ', 'class ')) and len(out) > 1:
                 break
-        return "\n".join(out).strip()
+        extracted = "\n".join(out).strip()
+        # Validate meaningful implementation
+        if _has_meaningful_implementation(extracted):
+            return extracted
 
-    # 3) Fallback: if text itself is code and includes imports but forgot the function name, return text
-    return text if 'def execute_trade' in text else None
+    # 3) Fallback: if text itself is code with meaningful implementation
+    if 'def execute_trade' in text and _has_meaningful_implementation(text):
+        return text
+
+    return None

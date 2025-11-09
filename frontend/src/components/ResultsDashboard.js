@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import html2canvas from 'html2canvas';
 import './ResultsDashboard.css';
 
 // Import provider icons
@@ -98,6 +99,7 @@ const AgentNameDisplay = ({ fullName }) => {
 
 const ResultsDashboard = ({ results, onBack }) => {
   const [downloadFormat, setDownloadFormat] = useState('json');
+  const dashboardRef = useRef(null);
 
   if (!results || !results.leaderboard) {
     return null;
@@ -182,11 +184,44 @@ Total PnL: $${metrics.totalPnL.toFixed(2)}`;
     alert('Metrics copied to clipboard!');
   };
 
+  const downloadImage = async () => {
+    if (!dashboardRef.current) return;
+
+    try {
+      // Hide the back button temporarily for cleaner screenshot
+      const backButton = dashboardRef.current.querySelector('.results-footer');
+      const originalDisplay = backButton ? backButton.style.display : '';
+      if (backButton) backButton.style.display = 'none';
+
+      const canvas = await html2canvas(dashboardRef.current, {
+        backgroundColor: '#0f0f23',
+        scale: 2, // Higher quality
+        logging: false,
+        useCORS: true
+      });
+
+      // Restore back button
+      if (backButton) backButton.style.display = originalDisplay;
+
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `algoclash-results-${timestamp}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Error downloading image:', error);
+      alert('Failed to download image. Please try again.');
+    }
+  };
+
   return (
-    <div className="results-dashboard">
+    <div ref={dashboardRef} className="results-dashboard">
       <div className="results-header">
         <h2>🏁 Battle Results</h2>
         <div className="results-actions-header">
+          <button onClick={downloadImage} className="download-image-btn" title="Download results as image">
+            🖼️ Download Image
+          </button>
           <select
             value={downloadFormat}
             onChange={(e) => setDownloadFormat(e.target.value)}
@@ -196,7 +231,7 @@ Total PnL: $${metrics.totalPnL.toFixed(2)}`;
             <option value="json">JSON</option>
             <option value="csv">CSV</option>
           </select>
-          <button onClick={downloadResults} className="download-btn" title="Download results">
+          <button onClick={downloadResults} className="download-btn" title="Download results data">
             💾 Download
           </button>
           <button onClick={copyMetrics} className="copy-btn" title="Copy metrics">

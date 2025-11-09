@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   Line,
   XAxis,
@@ -8,9 +8,12 @@ import {
   ResponsiveContainer,
   ComposedChart
 } from 'recharts';
+import html2canvas from 'html2canvas';
 import './MarketSimulationChart.css';
 
 const MarketSimulationChart = ({ chartData }) => {
+  const chartRef = useRef(null);
+
   // Agent color palette - vibrant colors for visibility
   const agentColors = [
     '#FF6B6B', // Red
@@ -176,6 +179,28 @@ const MarketSimulationChart = ({ chartData }) => {
   const latestTick = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1] : null;
   const displayAgents = agents.slice(0, 6); // Show only first 6 agents
 
+  // Download chart as PNG
+  const downloadChart = async () => {
+    if (!chartRef.current) return;
+
+    try {
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: '#1a1a2e',
+        scale: 2, // Higher quality
+        logging: false
+      });
+
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      link.download = `market-simulation-${timestamp}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Error downloading chart:', error);
+      alert('Failed to download chart. Please try again.');
+    }
+  };
+
   // Render agent stat cards
   const renderAgentStatCards = () => {
     if (!latestTick || displayAgents.length === 0) return null;
@@ -223,11 +248,16 @@ const MarketSimulationChart = ({ chartData }) => {
   return (
     <>
       <div className="chart-header">
-        <h3>📈 Live Market Simulation - Agent Performance</h3>
+        <div className="chart-title-section">
+          <h3>📈 Live Market Simulation - Agent Performance</h3>
+          <button onClick={downloadChart} className="download-chart-btn" title="Download chart as PNG">
+            📥 Download Chart
+          </button>
+        </div>
         {renderLegend()}
       </div>
 
-      <div className="market-simulation-layout">
+      <div ref={chartRef} className="market-simulation-layout">
         {/* Left side: Chart */}
         <div className="chart-section">
           <ResponsiveContainer width="100%" height={480}>
