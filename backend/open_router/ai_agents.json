@@ -91,10 +91,10 @@
   ],
   "OpenRouter": [
     "openrouter/sonoma-sky-alpha",
-    "openrouter/sonoma-dusk-alpha"
+    "openrouter/sonoma-dusk-alpha",
+    "openrouter/polaris-alpha"
   ],
   "Minimax": [
     "minimax/minimax-m2:free"
   ]
-  
 }
