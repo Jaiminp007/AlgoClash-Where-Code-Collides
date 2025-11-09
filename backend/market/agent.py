@@ -385,13 +385,112 @@ class AgentManager:
         """Get summary of all portfolios."""
         total_trades = len(self.trade_records)
         total_volume = sum(t.quantity for t in self.trade_records)
-        
+
         return {
             'total_agents': len(self.agents),
             'total_trades': total_trades,
             'total_volume': total_volume,
             'leaderboard': self.get_leaderboard(current_price)
         }
+
+    def check_margin_call(self, agent_name: str, current_price: float, margin_threshold: float = 0.5) -> bool:
+        """
+        Check if an agent is in margin call (portfolio value below threshold).
+
+        Args:
+            agent_name: Name of the agent to check
+            current_price: Current market price
+            margin_threshold: Threshold as decimal (0.5 = 50% of initial value)
+
+        Returns:
+            True if agent is in margin call, False otherwise
+        """
+        if agent_name not in self.portfolios:
+            return False
+
+        portfolio = self.portfolios[agent_name]
+        initial_value = self.initial_values.get(agent_name, 10000.0)
+        current_value = portfolio.get_total_value(current_price)
+
+        # Margin call triggered if current value drops to or below threshold * initial value
+        min_required_value = initial_value * margin_threshold
+
+        return current_value <= min_required_value
+
+    def liquidate_position(self, agent_name: str, current_price: float) -> bool:
+        """
+        Liquidate an agent's position (close out all holdings).
+        This is called when margin requirements are breached.
+
+        Args:
+            agent_name: Name of the agent to liquidate
+            current_price: Current market price for liquidation
+
+        Returns:
+            True if liquidation was successful
+        """
+        if agent_name not in self.portfolios:
+            return False
+
+        portfolio = self.portfolios[agent_name]
+        portfolio_before = Portfolio(cash=portfolio.cash, stock=portfolio.stock)
+
+        # If agent has short position (negative stock), need to buy back
+        if portfolio.stock < 0:
+            quantity = abs(portfolio.stock)
+            cost = quantity * current_price
+
+            # Force liquidation even if insufficient cash
+            portfolio.cash -= cost
+            portfolio.stock = 0
+
+            # Record the forced liquidation trade
+            trade_record = TradeRecord(
+                trade_id=str(uuid.uuid4()),
+                agent_name=agent_name,
+                side='buy',  # Buying to cover short
+                quantity=quantity,
+                price=current_price,
+                timestamp=time.time(),
+                portfolio_before=portfolio_before,
+                portfolio_after=Portfolio(cash=portfolio.cash, stock=portfolio.stock)
+            )
+            self.trade_records.append(trade_record)
+
+            if isinstance(self.agents[agent_name], BaseAgent):
+                self.agents[agent_name].record_trade(trade_record)
+
+            print(f"⚠️ MARGIN CALL LIQUIDATION: {agent_name} forced to cover {quantity} shares @ ${current_price:.2f}")
+            return True
+
+        # If agent has long position, sell everything
+        elif portfolio.stock > 0:
+            quantity = portfolio.stock
+            revenue = quantity * current_price
+
+            portfolio.cash += revenue
+            portfolio.stock = 0
+
+            # Record the forced liquidation trade
+            trade_record = TradeRecord(
+                trade_id=str(uuid.uuid4()),
+                agent_name=agent_name,
+                side='sell',
+                quantity=quantity,
+                price=current_price,
+                timestamp=time.time(),
+                portfolio_before=portfolio_before,
+                portfolio_after=Portfolio(cash=portfolio.cash, stock=portfolio.stock)
+            )
+            self.trade_records.append(trade_record)
+
+            if isinstance(self.agents[agent_name], BaseAgent):
+                self.agents[agent_name].record_trade(trade_record)
+
+            print(f"⚠️ MARGIN CALL LIQUIDATION: {agent_name} forced to sell {quantity} shares @ ${current_price:.2f}")
+            return True
+
+        return False
 
 
 # Example agents for testing

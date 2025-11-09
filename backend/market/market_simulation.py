@@ -189,6 +189,9 @@ class MarketSimulation:
         # Expire any resting orders at end of tick and release reservations
         self._expire_and_cancel_orders()
 
+        # Check for margin calls and liquidate positions if necessary
+        self._check_and_handle_margin_calls(current_price, log)
+
         # Call tick callback if provided (for real-time updates to frontend)
         if self.tick_callback:
             try:
@@ -380,7 +383,42 @@ class MarketSimulation:
                     self._agent_reserved_stock[agent] = max(0, self._agent_reserved_stock.get(agent, 0) - dec_qty)
                 # Remove meta
                 self._order_meta.pop(order_id, None)
-                    
+
+    def _check_and_handle_margin_calls(self, current_price: float, log: bool = True):
+        """
+        Check all agents for margin calls and liquidate positions if necessary.
+        Margin call triggered when portfolio value drops below 50% of initial value.
+        """
+        margin_threshold = 0.5  # 50% of initial value
+
+        for agent_name in list(self.agent_manager.agents.keys()):
+            # Skip liquidity providers
+            if agent_name.startswith("Liquidity_"):
+                continue
+
+            # Check if agent is in margin call
+            if self.agent_manager.check_margin_call(agent_name, current_price, margin_threshold):
+                portfolio = self.agent_manager.portfolios[agent_name]
+                initial_value = self.agent_manager.initial_values.get(agent_name, 10000.0)
+                current_value = portfolio.get_total_value(current_price)
+
+                if log:
+                    print(f"\n🚨 MARGIN CALL: {agent_name}")
+                    print(f"   Initial Value: ${initial_value:.2f}")
+                    print(f"   Current Value: ${current_value:.2f}")
+                    print(f"   Loss: ${current_value - initial_value:.2f} ({((current_value/initial_value - 1) * 100):+.2f}%)")
+                    print(f"   Cash: ${portfolio.cash:.2f}, Shares: {portfolio.stock}")
+
+                # Liquidate the position
+                self.agent_manager.liquidate_position(agent_name, current_price)
+
+                # Update final values after liquidation
+                portfolio_after = self.agent_manager.portfolios[agent_name]
+                final_value = portfolio_after.get_total_value(current_price)
+
+                if log:
+                    print(f"   After Liquidation: ${final_value:.2f} (Cash: ${portfolio_after.cash:.2f}, Shares: {portfolio_after.stock})")
+
     def _log_order_book_state(self):
         """Log the current state of the order book."""
         print(f"\n📊 Order Book State (Tick {self.current_tick}):")

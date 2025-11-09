@@ -8,6 +8,12 @@
   padding: 0;
 }
 
+.chart-title-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 .chart-header h3 {
   color: #00C864;
   font-size: 1.4rem;
@@ -15,6 +21,34 @@
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
   text-shadow: 0 3px 10px rgba(0, 200, 100, 0.4);
+}
+
+.download-chart-btn {
+  background: linear-gradient(135deg, #00C864, #00A854);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 200, 100, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-chart-btn:hover {
+  background: linear-gradient(135deg, #00E070, #00C864);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 200, 100, 0.4);
+}
+
+.download-chart-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 8px rgba(0, 200, 100, 0.3);
 }
 
 /* Multi-line legend for agent portfolios */

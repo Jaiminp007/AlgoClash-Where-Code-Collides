@@ -45,6 +45,34 @@
   outline: none;
 }
 
+.download-image-btn {
+  background: linear-gradient(135deg, #00C864, #00A854);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 200, 100, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.download-image-btn:hover {
+  background: linear-gradient(135deg, #00E070, #00C864);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 200, 100, 0.4);
+}
+
+.download-image-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 8px rgba(0, 200, 100, 0.3);
+}
+
 .download-btn,
 .copy-btn {
   background: rgba(255, 211, 10, 0.15);

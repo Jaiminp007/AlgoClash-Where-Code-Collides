@@ -768,7 +768,7 @@
   .center-box.expanded,
   .center-box.review-expanded {
     width: 90%;
-    height: 85%;
+    height: 95%;
     max-height: calc(100vh - 160px);
   }
 
