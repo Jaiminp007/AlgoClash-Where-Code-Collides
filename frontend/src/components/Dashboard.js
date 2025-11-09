@@ -939,6 +939,14 @@ const Dashboard = () => {
         {simulationResults && generationPhase === 'completed' && (
           <div className="results-overlay">
             <div className="results-modal">
+              {/* Chart Section - Preserved from simulation */}
+              {chartData && chartData.length > 0 && (
+                <div className="results-chart-section">
+                  <MarketSimulationChart chartData={chartData} />
+                </div>
+              )}
+
+              {/* Leaderboard Section */}
               <ResultsDashboard results={simulationResults} onBack={handleBack} />
             </div>
           </div>

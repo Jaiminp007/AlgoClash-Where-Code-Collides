@@ -6,7 +6,9 @@ Script to fetch stock data from yfinance and save it as CSV for algorithm genera
 import yfinance as yf
 import pandas as pd
 import os
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 def fetch_stock_data(symbol="AAPL", period_days=365, interval="1d"):
     """
@@ -129,18 +131,69 @@ def generate_multiple_stocks_data(symbols=None, output_dir="data"):
     
     print(f"🎉 Stock data generation completed!")
 
+def load_tickers_from_json():
+    """Load stock tickers from stock_ticker.json"""
+    try:
+        script_dir = Path(__file__).resolve().parent
+        json_path = script_dir / "open_router" / "stock_ticker.json"
+
+        if not json_path.exists():
+            print(f"⚠️ stock_ticker.json not found at {json_path}")
+            print("Using default tickers...")
+            return ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'META', 'NFLX']
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        tickers = data.get("Stock_Ticker", [])
+        print(f"✅ Loaded {len(tickers)} tickers from stock_ticker.json")
+        return tickers
+
+    except Exception as e:
+        print(f"❌ Error reading stock_ticker.json: {e}")
+        print("Using default tickers...")
+        return ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'META', 'NFLX']
+
+def generate_stock_data_for_ticker(ticker, output_dir="data"):
+    """
+    Generate stock data for a single ticker
+
+    Args:
+        ticker: Stock symbol (e.g., 'AAPL', 'GME')
+        output_dir: Directory to save CSV file
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f"\n📊 Generating data for {ticker}...")
+
+    # Get the directory of this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    full_output_dir = os.path.join(script_dir, output_dir)
+
+    # Fetch data
+    data = fetch_stock_data(ticker, period_days=365, interval="1d")
+
+    if data is not None:
+        # Save individual file
+        individual_file = os.path.join(full_output_dir, f"{ticker}_data.csv")
+        return save_stock_data_to_csv(data, individual_file)
+
+    return False
+
 def main():
     """Main function to generate stock data"""
     print("📊 STOCK DATA GENERATOR")
     print("=" * 40)
-    
+
     # Get the directory of this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(script_dir, "data")
-    
-    # Generate stock data for popular symbols
-    symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'META', 'NFLX']
-    
+
+    # Load tickers from stock_ticker.json
+    symbols = load_tickers_from_json()
+    print(f"📋 Generating data for: {', '.join(symbols)}")
+
     generate_multiple_stocks_data(symbols, output_dir)
 
 if __name__ == "__main__":

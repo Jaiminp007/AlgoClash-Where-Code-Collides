@@ -422,7 +422,7 @@ CRITICAL TRADING RULES:
 Output format:
     - Raw Python code ONLY
     - No markdown code fences (no ```)
-    - No explanatory comments or docstrings
+    - Put comments with # to explain your logic and help the script run correctly
     - No print statements or debug output
     - Code must be immediately executable
 
