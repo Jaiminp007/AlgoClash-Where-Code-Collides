@@ -16,8 +16,8 @@ from .agent import AgentManager, TradingAgent, Portfolio
 @dataclass
 class SimulationConfig:
     """Configuration for market simulation."""
-    max_ticks: int = 60
-    tick_sleep: float = 1.0
+    max_ticks: int = 250
+    tick_sleep: float = 0.25
     log_trades: bool = True
     log_orders: bool = False
     enable_order_book: bool = True
@@ -572,13 +572,13 @@ class MarketSimulation:
 
 
 # Helper function to create a basic simulation
-def create_basic_simulation(agents: List[TradingAgent], 
-                          max_ticks: int = 60, 
+def create_basic_simulation(agents: List[TradingAgent],
+                          max_ticks: int = 250,
                           enable_order_book: bool = True) -> MarketSimulation:
     """Create a basic market simulation with sensible defaults."""
     config = SimulationConfig(
         max_ticks=max_ticks,
-        tick_sleep=1.0,
+        tick_sleep=0.25,
         log_trades=True,
         log_orders=False,
         enable_order_book=enable_order_book,

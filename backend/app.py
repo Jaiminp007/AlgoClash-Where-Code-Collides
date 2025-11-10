@@ -44,16 +44,24 @@ def get_ai_agents():
 
 @app.get("/api/data_files")
 def list_data_files():
-    """List available stock CSVs in backend/data ending with *_data.csv"""
+    """List available stocks from stock_ticker.json in open_router folder"""
     try:
-        data_dir = Path(__file__).resolve().parent / "data"
-        if not data_dir.exists():
-            return jsonify({"stocks": []})
-        files = sorted([p.name for p in data_dir.glob("*_data.csv")])
+        # Read from stock_ticker.json
+        json_path = Path(__file__).resolve().parent / "open_router" / "stock_ticker.json"
+        if not json_path.exists():
+            return jsonify({"error": "stock_ticker.json not found"}), 404
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        tickers = data.get("Stock_Ticker", [])
+
+        # Format response to match frontend expectations
         stocks = [{
-            "ticker": name.replace("_data.csv", "").upper(),
-            "filename": name
-        } for name in files]
+            "ticker": ticker.upper(),
+            "filename": f"{ticker}_data.csv"
+        } for ticker in tickers]
+
         return jsonify({"stocks": stocks})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -365,11 +373,38 @@ def run_generation_background(gen_id, agents, stock_file):
         running_generations[gen_id]["progress"] = 10
         running_generations[gen_id]["message"] = "Starting algorithm generation..."
 
-        # Import generation function
-        from open_router.algo_gen import generate_algorithms_for_agents
-
         # Extract ticker from filename
         ticker = stock_file.replace("_data.csv", "").upper()
+
+        # Check if stock data CSV exists, generate if missing
+        backend_root = Path(__file__).resolve().parent
+        csv_path = backend_root / "data" / f"{ticker}_data.csv"
+
+        if not csv_path.exists():
+            running_generations[gen_id]["progress"] = 15
+            running_generations[gen_id]["message"] = f"Fetching {ticker} stock data from yfinance..."
+            print(f"📊 Stock data not found for {ticker}, fetching from yfinance...")
+
+            try:
+                from generate_stock_data import generate_stock_data_for_ticker
+                success = generate_stock_data_for_ticker(ticker, "data")
+
+                if not success:
+                    raise RuntimeError(f"Failed to fetch stock data for {ticker}")
+
+                print(f"✅ Successfully generated {ticker} stock data")
+            except Exception as e:
+                error_msg = f"Failed to fetch stock data for {ticker}: {str(e)}"
+                print(f"❌ {error_msg}")
+                running_generations[gen_id]["status"] = "error"
+                running_generations[gen_id]["error"] = error_msg
+                running_generations[gen_id]["message"] = error_msg
+                return
+        else:
+            print(f"✅ Stock data already exists for {ticker}")
+
+        # Import generation function
+        from open_router.algo_gen import generate_algorithms_for_agents
 
         running_generations[gen_id]["progress"] = 20
         running_generations[gen_id]["message"] = f"Generating algorithms for {ticker}..."
@@ -474,6 +509,33 @@ def run_simulation_only_background(sim_id, ticker, agents_list=None):
         running_simulations[sim_id]["progress"] = 10
         running_simulations[sim_id]["message"] = "Starting market simulation..."
 
+        # Check if stock data CSV exists, generate if missing
+        backend_root = Path(__file__).resolve().parent
+        csv_path = backend_root / "data" / f"{ticker}_data.csv"
+
+        if not csv_path.exists():
+            running_simulations[sim_id]["progress"] = 15
+            running_simulations[sim_id]["message"] = f"Fetching {ticker} stock data from yfinance..."
+            print(f"📊 Stock data not found for {ticker}, fetching from yfinance...")
+
+            try:
+                from generate_stock_data import generate_stock_data_for_ticker
+                success = generate_stock_data_for_ticker(ticker, "data")
+
+                if not success:
+                    raise RuntimeError(f"Failed to fetch stock data for {ticker}")
+
+                print(f"✅ Successfully generated {ticker} stock data")
+            except Exception as e:
+                error_msg = f"Failed to fetch stock data for {ticker}: {str(e)}"
+                print(f"❌ {error_msg}")
+                running_simulations[sim_id]["status"] = "error"
+                running_simulations[sim_id]["error"] = error_msg
+                running_simulations[sim_id]["message"] = error_msg
+                return
+        else:
+            print(f"✅ Stock data already exists for {ticker}")
+
         # Import simulation function
         from main import run_market_simulation
 
@@ -558,11 +620,38 @@ def run_simulation_background(sim_id, agents, stock_file):
         running_simulations[sim_id]["progress"] = 10
         running_simulations[sim_id]["message"] = "Starting simulation..."
 
-        # Import and run the main simulation logic
-        from main import run_simulation_with_params
-
         # Extract ticker from filename
         ticker = stock_file.replace("_data.csv", "").upper()
+
+        # Check if stock data CSV exists, generate if missing
+        backend_root = Path(__file__).resolve().parent
+        csv_path = backend_root / "data" / f"{ticker}_data.csv"
+
+        if not csv_path.exists():
+            running_simulations[sim_id]["progress"] = 15
+            running_simulations[sim_id]["message"] = f"Fetching {ticker} stock data from yfinance..."
+            print(f"📊 Stock data not found for {ticker}, fetching from yfinance...")
+
+            try:
+                from generate_stock_data import generate_stock_data_for_ticker
+                success = generate_stock_data_for_ticker(ticker, "data")
+
+                if not success:
+                    raise RuntimeError(f"Failed to fetch stock data for {ticker}")
+
+                print(f"✅ Successfully generated {ticker} stock data")
+            except Exception as e:
+                error_msg = f"Failed to fetch stock data for {ticker}: {str(e)}"
+                print(f"❌ {error_msg}")
+                running_simulations[sim_id]["status"] = "error"
+                running_simulations[sim_id]["error"] = error_msg
+                running_simulations[sim_id]["message"] = error_msg
+                return
+        else:
+            print(f"✅ Stock data already exists for {ticker}")
+
+        # Import and run the main simulation logic
+        from main import run_simulation_with_params
 
         running_simulations[sim_id]["progress"] = 20
         running_simulations[sim_id]["message"] = f"Generating algorithms for {ticker}..."

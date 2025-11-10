@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).resolve().parent / "open_router"))
 from market.tick_generator import CSVTickGenerator, display_stock_chart
 from market.market_simulation import MarketSimulation
 from market.agent import MarketMakerAgent
+from generate_stock_data import generate_stock_data_for_ticker
 
 import warnings
 from typing import Callable, Dict, Any, List
@@ -115,12 +116,26 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
     warnings.filterwarnings("ignore", category=FutureWarning)
     
     if progress_callback:
-        progress_callback(25, "Starting algorithm generation...")
-    
-    # Generate algorithms for selected agents
-    print("\n🧠 STEP 1: Generating Trading Algorithms")
+        progress_callback(20, "Refreshing stock data cache...")
+
+    print("\n💾 STEP 1: Refreshing Stock Data Cache")
     print("-" * 40)
-    
+    refreshed = False
+    try:
+        refreshed = bool(generate_stock_data_for_ticker(symbol))
+    except Exception as refresh_error:
+        print(f"⚠️ Stock data refresh error: {refresh_error}")
+    if refreshed:
+        print(f"✅ Updated CSV data for {symbol}")
+    else:
+        print(f"⚠️ Using existing CSV data for {symbol}")
+    if progress_callback:
+        progress_callback(35, "Stock data ready, starting algorithm generation...")
+
+    # Generate algorithms for selected agents
+    print("\n🧠 STEP 2: Generating Trading Algorithms")
+    print("-" * 40)
+
     try:
         from open_router.algo_gen import generate_algorithms_for_agents
         success = generate_algorithms_for_agents(selected_agents, symbol, progress_callback)
@@ -167,7 +182,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     
     # Create tick generator from CSV files (faster, no network required)
     # CSV files are pre-downloaded and stored in backend/data/
-    tick_src = CSVTickGenerator(symbol=symbol).stream(sleep_seconds=0.25)  # 0.25s per tick = 15s for 60 ticks
+    tick_src = CSVTickGenerator(symbol=symbol).stream(sleep_seconds=0.25)  # 0.25s per tick = ~62s for 250 ticks
 
     # Discover generated algorithm modules
     base_gen = Path(__file__).resolve().parent / "generate_algo"
@@ -267,7 +282,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     # Create simulation with ORDER BOOK ENABLED and slower pacing for visibility
     from market.market_simulation import SimulationConfig
     config = SimulationConfig(
-        max_ticks=500,  # 500 ticks at 0.25s each = 125 seconds total
+        max_ticks=250,  # 250 ticks at 0.25s each = ~62 seconds total
         tick_sleep=0.25,  # 250ms between ticks for visibility
         log_trades=True,
         log_orders=False,  # Disable for cleaner logs
@@ -290,7 +305,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     try:
         if progress_callback:
             progress_callback(90, "Running market simulation...")
-        results = sim.run(ticks=tick_src, max_ticks=60, log=True)  # 60 ticks for 15-second simulation
+        results = sim.run(ticks=tick_src, max_ticks=250, log=True)  # 250 ticks for extended simulation
         if progress_callback:
             progress_callback(95, "Calculating final results...")
     except KeyboardInterrupt:

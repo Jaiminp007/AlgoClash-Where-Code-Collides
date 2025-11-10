@@ -9,9 +9,10 @@ import {
   ComposedChart
 } from 'recharts';
 import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import './MarketSimulationChart.css';
 
-const MarketSimulationChart = ({ chartData }) => {
+const MarketSimulationChart = ({ chartData, hideAgentCards = false }) => {
   const chartRef = useRef(null);
 
   // Agent color palette - vibrant colors for visibility
@@ -179,22 +180,42 @@ const MarketSimulationChart = ({ chartData }) => {
   const latestTick = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1] : null;
   const displayAgents = agents.slice(0, 6); // Show only first 6 agents
 
-  // Download chart as PNG
+  // Download chart as PDF (graph only)
   const downloadChart = async () => {
     if (!chartRef.current) return;
 
     try {
-      const canvas = await html2canvas(chartRef.current, {
+      // Find only the chart section (not the stats cards)
+      const chartSection = chartRef.current.querySelector('.chart-section');
+      if (!chartSection) return;
+
+      // Hide the chart-stats-enhanced temporarily for cleaner export
+      const statsElement = chartSection.querySelector('.chart-stats-enhanced');
+      const originalStatsDisplay = statsElement ? statsElement.style.display : '';
+      if (statsElement) statsElement.style.display = 'none';
+
+      const canvas = await html2canvas(chartSection, {
         backgroundColor: '#1a1a2e',
         scale: 2, // Higher quality
-        logging: false
+        logging: false,
+        useCORS: true
       });
 
-      const link = document.createElement('a');
+      // Restore stats element
+      if (statsElement) statsElement.style.display = originalStatsDisplay;
+
+      // Convert canvas to PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      link.download = `market-simulation-${timestamp}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      pdf.save(`market-simulation-${timestamp}.pdf`);
     } catch (error) {
       console.error('Error downloading chart:', error);
       alert('Failed to download chart. Please try again.');
@@ -250,8 +271,8 @@ const MarketSimulationChart = ({ chartData }) => {
       <div className="chart-header">
         <div className="chart-title-section">
           <h3>📈 Live Market Simulation - Agent Performance</h3>
-          <button onClick={downloadChart} className="download-chart-btn" title="Download chart as PNG">
-            📥 Download Chart
+          <button onClick={downloadChart} className="download-chart-btn" title="Download chart as PDF">
+            📄 Download PDF
           </button>
         </div>
         {renderLegend()}
@@ -366,10 +387,12 @@ const MarketSimulationChart = ({ chartData }) => {
           </div>
         </div>
 
-        {/* Right side: Agent stat cards */}
-        <div className="stats-section">
-          {renderAgentStatCards()}
-        </div>
+        {/* Right side: Agent stat cards - hidden in results view */}
+        {!hideAgentCards && (
+          <div className="stats-section">
+            {renderAgentStatCards()}
+          </div>
+        )}
       </div>
     </>
   );

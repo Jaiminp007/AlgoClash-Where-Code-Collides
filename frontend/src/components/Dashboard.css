@@ -602,6 +602,327 @@
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Wide modal for side-by-side results */
+.results-modal-wide {
+  background: rgba(0, 29, 61, 0.98);
+  border: 2px solid #FFD60A;
+  border-radius: 15px;
+  padding: 20px;
+  max-width: 95%;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+  z-index: 2001;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Winner banner at top */
+.winner-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, rgba(255, 195, 0, 0.1), rgba(255, 214, 10, 0.05));
+  border: 2px solid #FFD60A;
+  border-radius: 10px;
+}
+
+.trophy-large {
+  font-size: 4rem;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.winner-info-banner {
+  text-align: center;
+}
+
+.winner-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #FFD60A;
+  letter-spacing: 3px;
+  margin-bottom: 5px;
+}
+
+.winner-name-large {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 10px;
+}
+
+.winner-roi-large {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.winner-roi-large .positive {
+  color: #4CAF50;
+}
+
+.winner-roi-large .negative {
+  color: #f44336;
+}
+
+/* Side by side content */
+.results-content-split {
+  display: flex;
+  gap: 20px;
+  min-height: 600px;
+}
+
+/* Left: Chart container */
+.results-chart-container {
+  flex: 2;
+  min-width: 0; /* Prevent flex item from overflowing */
+}
+
+/* Right: Leaderboard container */
+.results-leaderboard-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 350px;
+  max-width: 500px;
+}
+
+.leaderboard-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #FFD60A;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+/* Leaderboard cards - 2 column grid layout */
+.leaderboard-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  overflow-y: auto;
+  max-height: calc(90vh - 300px);
+  padding-right: 10px;
+  margin-bottom: 20px;
+}
+
+/* Scrollbar styling */
+.leaderboard-cards::-webkit-scrollbar {
+  width: 8px;
+}
+
+.leaderboard-cards::-webkit-scrollbar-track {
+  background: rgba(0, 53, 102, 0.3);
+  border-radius: 4px;
+}
+
+.leaderboard-cards::-webkit-scrollbar-thumb {
+  background: #FFD60A;
+  border-radius: 4px;
+}
+
+.leaderboard-card {
+  background: linear-gradient(135deg, rgba(0, 29, 61, 0.95), rgba(0, 53, 102, 0.95));
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.leaderboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 214, 10, 0.4);
+}
+
+/* Top 3 special styling */
+.leaderboard-card.rank-1 {
+  border-left: 4px solid #FFD700;
+}
+
+.leaderboard-card.rank-2 {
+  border-left: 4px solid #C0C0C0;
+}
+
+.leaderboard-card.rank-3 {
+  border-left: 4px solid #CD7F32;
+}
+
+.leaderboard-rank-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rank-badge {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.agent-card-content {
+  flex: 1;
+}
+
+/* Agent card header with icon and name */
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-provider-icon-small {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.agent-card-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #FFD60A;
+  word-break: break-word;
+  line-height: 1.2;
+  flex: 1;
+}
+
+/* Leaderboard card body */
+.leaderboard-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leaderboard-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.stat-label-lb {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.7rem;
+  font-family: 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+}
+
+.stat-value-lb {
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: 'Rajdhani', sans-serif;
+  color: #ffffff;
+}
+
+.stat-value-lb-large {
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: 'Rajdhani', sans-serif;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.stat-value-lb.positive {
+  color: #4CAF50;
+}
+
+.stat-value-lb.negative {
+  color: #f44336;
+}
+
+/* Legacy metric styles for backwards compatibility */
+.agent-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+}
+
+.metric-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.metric-value {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.metric-value.positive {
+  color: #4CAF50;
+}
+
+.metric-value.negative {
+  color: #f44336;
+}
+
+/* Back button */
+.back-button-results {
+  background: linear-gradient(135deg, #003566, #001d3d);
+  color: #FFD60A;
+  border: 2px solid #FFD60A;
+  border-radius: 8px;
+  padding: 12px 30px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  margin-top: auto;
+}
+
+.back-button-results:hover {
+  background: linear-gradient(135deg, #004080, #002850);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(255, 214, 10, 0.4);
+}
+
+/* Responsive design */
+@media (max-width: 1400px) {
+  .results-content-split {
+    flex-direction: column;
+  }
+
+  .results-leaderboard-container {
+    max-width: 100%;
+    min-width: 100%;
+  }
+
+  .leaderboard-cards {
+    max-height: 500px;
+  }
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
