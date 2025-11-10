@@ -385,6 +385,22 @@ def load_csv_preview(csv_path: str, max_rows: int = 200) -> str:
 
 def build_generation_prompt(ticker: str, csv_preview: str) -> str:
     """Build a prompt that encourages original algorithm design without prescriptive templates."""
+
+    # Extract the first date from CSV preview to use as cutoff date
+    first_date = "2024-11-08"  # Default fallback
+    if csv_preview:
+        try:
+            lines = csv_preview.strip().split('\n')
+            if len(lines) > 1:  # Skip header
+                first_data_line = lines[1]
+                # Format: AAPL,2024-11-08 00:00:00-05:00,...
+                parts = first_data_line.split(',')
+                if len(parts) > 1:
+                    date_str = parts[1].split()[0]  # Get just the date part
+                    first_date = date_str
+        except Exception:
+            pass  # Use default if parsing fails
+
     base = f"""You are an expert quantitative trading researcher tasked with designing a unique, production-ready trading algorithm.
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -472,10 +488,18 @@ RECOMMENDED APPROACH - Stateful Trading Logic:
    - Use portfolio rotation strategies
 
 OPTIONAL: If you MUST use market data (NOT recommended):
-   - Use yfinance with AGGRESSIVE caching: yf.download(ticker, period="5d", interval="1m", progress=False)
+   - Use yfinance with AGGRESSIVE caching: yf.download(ticker, start="YYYY-MM-DD", end="YYYY-MM-DD", progress=False)
    - Store in module-level variable: _cached_data =
    - Check cache FIRST before downloading
    - WARNING: This adds latency and is discouraged for this simulation
+
+   ⚠️ CRITICAL DATA RESTRICTION:
+   - The market simulation starts on {first_date}
+   - You MUST ONLY use yfinance data from BEFORE {first_date}
+   - DO NOT fetch data from {first_date} onwards - this is the simulation period
+   - Use end="{first_date}" in your yfinance calls to prevent data leakage
+   - Example: yf.download(ticker, start="2024-01-01", end="{first_date}", progress=False)
+   - Fetching simulation-period data is CHEATING and will invalidate your algorithm
 
 Example of good stateful approach:
     _trade_cycle = 0
@@ -648,12 +672,14 @@ Ticker: {ticker}
         preview_lines = csv_preview.split('\n')[:50]  # Limit preview size
         preview_sample = '\n'.join(preview_lines)
         base += f"""
-Recent market data sample:
+Recent market data sample (SIMULATION PERIOD - DO NOT USE THIS DATA):
 ```
 {preview_sample}
 ```
 
-This is a reference. Your algorithm must fetch fresh data using yfinance.
+⚠️ CRITICAL: This CSV data represents the SIMULATION PERIOD starting from {first_date}.
+You MUST NOT fetch this data from yfinance. Only use historical data BEFORE {first_date}.
+If you use yfinance, always set end="{first_date}" to prevent accessing simulation data.
 """
 
     base += """
@@ -666,11 +692,12 @@ You will receive a STRATEGY DIRECTIVE below that specifies your unique trading p
 Requirements checklist:
 ✓ Function named execute_trade with exact signature
 ✓ Returns "BUY", "SELL", or "HOLD" (uppercase strings)
-✓ Uses yfinance with progress=False
+✓ Uses yfinance with progress=False AND end="{first_date}" to prevent data leakage
 ✓ Implements caching for data downloads
 ✓ Handles all error cases (insufficient data, NaN, division by zero)
 ✓ Raw Python code only (no markdown, no comments)
 ✓ Original strategy design (not a generic template)
+✓ CRITICAL: Only fetches data BEFORE {first_date} - no simulation period data!
 
 Now design your algorithm. Be creative, rigorous, and compete to win.
 """
