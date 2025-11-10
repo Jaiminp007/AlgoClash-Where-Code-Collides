@@ -369,7 +369,7 @@ def select_stock_file() -> tuple:
     return ticker, selected, path
 
 def load_csv_preview(csv_path: str, max_rows: int = 200) -> str:
-    """Return header + last max_rows of CSV to keep prompt size reasonable."""
+    """Return header + first max_rows of CSV to extract correct simulation start date."""
     try:
         with open(csv_path, 'r') as f:
             lines = f.readlines()
@@ -377,7 +377,8 @@ def load_csv_preview(csv_path: str, max_rows: int = 200) -> str:
             return ""
         header = lines[0].strip()
         data_lines = [ln.strip() for ln in lines[1:] if ln.strip()]
-        preview = data_lines[-max_rows:] if len(data_lines) > max_rows else data_lines
+        # CRITICAL: Use FIRST rows to get the simulation START date, not last rows
+        preview = data_lines[:max_rows] if len(data_lines) > max_rows else data_lines
         out = [header] + preview
         return "\n".join(out)
     except Exception:
@@ -412,6 +413,37 @@ Design and implement a Python function that analyzes real market data and makes 
 Your algorithm will compete against other AI-generated strategies in a live market simulation. Originality and robustness are critical.
 
 ═══════════════════════════════════════════════════════════════════════════════
+🚨 CRITICAL DATA RESTRICTION - INSTANT DISQUALIFICATION IF VIOLATED 🚨
+═══════════════════════════════════════════════════════════════════════════════
+
+⛔ THE MARKET SIMULATION STARTS ON {first_date} ⛔
+
+ABSOLUTELY MANDATORY RULES (VIOLATION = DISQUALIFICATION):
+
+1. ❌ YOU CANNOT fetch data from {first_date} or later - THIS IS CHEATING
+2. ❌ YOU CANNOT use yfinance without setting end="{first_date}"
+3. ❌ YOU CANNOT access simulation period data in any way
+4. ✅ YOU MUST ONLY use historical data from BEFORE {first_date}
+
+WHY THIS MATTERS:
+The simulation will replay market data starting from {first_date}. If you download data
+that includes or goes past {first_date}, you will have FUTURE KNOWLEDGE of the simulation
+period, making your trades based on information you shouldn't have. This is cheating and
+will instantly disqualify your algorithm.
+
+CORRECT yfinance usage:
+    ✅ yf.download(ticker, start="2023-01-01", end="{first_date}", progress=False)
+    ✅ yf.download(ticker, period="1y", end="{first_date}", progress=False)
+
+WRONG yfinance usage (INSTANT DISQUALIFICATION):
+    ❌ yf.download(ticker, start="2023-01-01", end="2025-01-24", progress=False)
+    ❌ yf.download(ticker, start="2023-01-01", progress=False)  # No end date = includes future!
+    ❌ yf.download(ticker, period="1y", progress=False)  # No end date = includes future!
+    ❌ Any download that includes data from {first_date} onwards
+
+⚠️ IF YOU VIOLATE THIS RULE, YOUR ALGORITHM WILL BE DISQUALIFIED FOR CHEATING ⚠️
+
+═══════════════════════════════════════════════════════════════════════════════
 FUNCTION CONTRACT (MANDATORY)
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -435,15 +467,16 @@ CRITICAL TRADING RULES:
     - PROFIT IN ANY MARKET: Make money whether prices go up OR down
     - Detect market direction and trade accordingly (long in uptrends, short in downtrends)
 
-AGGRESSIVE TRADING MANDATE:
-    - This is a COMPETITION - you MUST trade aggressively to maximize ROI
-    - Trade FREQUENTLY - aim for multiple trades per simulation (avoid excessive HOLDs)
-    - Use LEVERAGE - take advantage of margin and short selling capabilities
-    - TAKE RISKS - conservative strategies will lose to aggressive ones
-    - Focus on MAXIMUM PROFIT - small gains are not enough to win
-    - React QUICKLY to market movements - hesitation costs money
-    - Don't be afraid to go ALL-IN on high-conviction trades
-    - Use your full buying power and shorting capacity when signals are strong
+STRATEGIC TRADING MANDATE:
+    - This is a COMPETITION - you MUST maximize risk-adjusted returns (ROI)
+    - Trade SELECTIVELY - quality over quantity (each trade must have strong conviction)
+    - AVOID OVERTRADING - transaction costs and slippage destroy returns
+    - Use LEVERAGE WISELY - margin and short selling are tools, not mandates
+    - Focus on POSITIVE EXPECTANCY - only trade when your edge is clear
+    - CAPITAL PRESERVATION - surviving with profits beats reckless gains
+    - Position sizing matters - scale exposure based on signal confidence
+    - Think like a professional trader: risk management, stop losses, profit targets
+    - HIGH FREQUENCY ≠ HIGH RETURNS - the best trades are often the ones you don't make
 
 Output format:
     - Raw Python code ONLY
@@ -488,18 +521,32 @@ RECOMMENDED APPROACH - Stateful Trading Logic:
    - Use portfolio rotation strategies
 
 OPTIONAL: If you MUST use market data (NOT recommended):
-   - Use yfinance with AGGRESSIVE caching: yf.download(ticker, start="YYYY-MM-DD", end="YYYY-MM-DD", progress=False)
+   - Use yfinance with AGGRESSIVE caching: yf.download(ticker, start="YYYY-MM-DD", end="{first_date}", progress=False)
    - Store in module-level variable: _cached_data =
    - Check cache FIRST before downloading
    - WARNING: This adds latency and is discouraged for this simulation
 
-   ⚠️ CRITICAL DATA RESTRICTION:
+   🚨🚨🚨 CRITICAL DATA RESTRICTION - REPEAT FOR EMPHASIS 🚨🚨🚨
+
+   ⛔ INSTANT DISQUALIFICATION IF YOU VIOLATE THIS ⛔
+
    - The market simulation starts on {first_date}
-   - You MUST ONLY use yfinance data from BEFORE {first_date}
-   - DO NOT fetch data from {first_date} onwards - this is the simulation period
-   - Use end="{first_date}" in your yfinance calls to prevent data leakage
-   - Example: yf.download(ticker, start="2024-01-01", end="{first_date}", progress=False)
-   - Fetching simulation-period data is CHEATING and will invalidate your algorithm
+   - You MUST set end="{first_date}" in ALL yfinance calls
+   - DO NOT fetch data from {first_date} onwards - this gives you FUTURE KNOWLEDGE
+   - MANDATORY format: yf.download(ticker, start="YYYY-MM-DD", end="{first_date}", progress=False)
+   - If you omit end parameter, you WILL be disqualified for cheating
+   - If you set end to ANY date >= {first_date}, you WILL be disqualified for cheating
+
+   EXAMPLES OF CHEATING (INSTANT DISQUALIFICATION):
+   ❌ yf.download(ticker, start="2023-01-01", progress=False)  # Missing end parameter!
+   ❌ yf.download(ticker, period="1y", progress=False)  # Missing end parameter!
+   ❌ yf.download(ticker, start="2023-01-01", end="2025-01-24", progress=False)  # After {first_date}!
+
+   ONLY ACCEPTABLE FORMAT:
+   ✅ yf.download(ticker, start="2023-01-01", end="{first_date}", progress=False)
+   ✅ yf.download(ticker, period="6mo", end="{first_date}", progress=False)
+
+   🚨 THIS IS NOT OPTIONAL - THIS IS MANDATORY TO PREVENT CHEATING 🚨
 
 Example of good stateful approach:
     _trade_cycle = 0
@@ -559,6 +606,16 @@ Your algorithm must be able to profit whether the market goes UP or DOWN:
     - Sideways/uncertain → HOLD or trade ranges
     - You can short sell (SELL with shares_held <= 0) to profit from declines
     - Focus on DIRECTIONAL PREDICTION, not just momentum following
+
+CRITICAL RISK MANAGEMENT PRINCIPLES:
+    - OVERTRADING IS THE #1 KILLER - fewer high-quality trades beat many mediocre ones
+    - Transaction costs matter: bid-ask spread, slippage, market impact compound quickly
+    - Track your performance: if losing, reduce position size or stop trading
+    - Use stop-loss logic: exit losing positions before they become disasters
+    - Position sizing: don't risk entire capital on every trade
+    - Signal filters: require multiple confirmations before entering trades
+    - Capital preservation: protecting your downside enables long-term profitability
+    - The best trade is often NO TRADE - patience is a competitive advantage
 
 Design your algorithm around a clear market hypothesis:
 
@@ -625,12 +682,14 @@ CRITICAL: You must CALCULATE any technical indicators you want to use. Example c
    NEVER assume indicators are pre-calculated in the dataframe
 
 Performance targets:
-   - Aim for 30-50% actionable decisions (BUY or SELL)
-   - Avoid algorithms that always return HOLD
-   - Balance signal frequency with signal quality
+   - Aim for HIGH WIN-RATE trades, not high frequency (quality > quantity)
+   - Trade only when your conviction is strong (multiple confirmations)
+   - Avoid overtrading - each trade costs money in spreads and slippage
    - CRITICAL: Profit in both UP and DOWN markets via directional trading
    - Use BUY for uptrends, SELL for downtrends (short selling enabled)
-   - Your goal is ABSOLUTE RETURNS regardless of market direction
+   - Your goal is RISK-ADJUSTED RETURNS - maximize profit while minimizing drawdown
+   - Remember: "The way to make money is to not lose it" - Warren Buffett
+   - Winning strategies are patient, selective, and disciplined
 
 ═══════════════════════════════════════════════════════════════════════════════
 IMPLEMENTATION REQUIREMENTS
@@ -672,14 +731,27 @@ Ticker: {ticker}
         preview_lines = csv_preview.split('\n')[:50]  # Limit preview size
         preview_sample = '\n'.join(preview_lines)
         base += f"""
-Recent market data sample (SIMULATION PERIOD - DO NOT USE THIS DATA):
+Recent market data sample (SIMULATION PERIOD - YOU CANNOT ACCESS THIS DATA):
 ```
 {preview_sample}
 ```
 
-⚠️ CRITICAL: This CSV data represents the SIMULATION PERIOD starting from {first_date}.
-You MUST NOT fetch this data from yfinance. Only use historical data BEFORE {first_date}.
-If you use yfinance, always set end="{first_date}" to prevent accessing simulation data.
+🚨🚨🚨 CRITICAL WARNING - READ THIS CAREFULLY 🚨🚨🚨
+
+⛔ THIS CSV DATA IS THE SIMULATION PERIOD STARTING FROM {first_date} ⛔
+
+YOU ABSOLUTELY CANNOT:
+❌ Fetch this data from yfinance
+❌ Use any yfinance call that includes data from {first_date} or later
+❌ Access ANY data from the simulation period in your algorithm
+
+YOU MUST:
+✅ ONLY use historical data from BEFORE {first_date}
+✅ ALWAYS set end="{first_date}" in every yfinance call
+✅ Understand that violating this = INSTANT DISQUALIFICATION for cheating
+
+This data preview is shown ONLY so you understand the market conditions you'll face.
+You cannot use this data to train your algorithm. That would be cheating.
 """
 
     base += """
@@ -692,14 +764,25 @@ You will receive a STRATEGY DIRECTIVE below that specifies your unique trading p
 Requirements checklist:
 ✓ Function named execute_trade with exact signature
 ✓ Returns "BUY", "SELL", or "HOLD" (uppercase strings)
-✓ Uses yfinance with progress=False AND end="{first_date}" to prevent data leakage
-✓ Implements caching for data downloads
 ✓ Handles all error cases (insufficient data, NaN, division by zero)
 ✓ Raw Python code only (no markdown, no comments)
 ✓ Original strategy design (not a generic template)
-✓ CRITICAL: Only fetches data BEFORE {first_date} - no simulation period data!
+✓ Implements caching for data downloads (if using yfinance)
 
-Now design your algorithm. Be creative, rigorous, and compete to win.
+🚨 MOST CRITICAL REQUIREMENT - VIOLATION = INSTANT DISQUALIFICATION 🚨
+✓ EVERY yfinance call MUST include end="{first_date}" parameter
+✓ NEVER fetch data from {first_date} or later
+✓ ONLY use historical data from BEFORE {first_date}
+✓ Example: yf.download(ticker, start="2023-01-01", end="{first_date}", progress=False)
+
+⛔ INSTANT DISQUALIFICATION IF:
+❌ You use yfinance without end="{first_date}" parameter
+❌ You fetch ANY data from the simulation period ({first_date} onwards)
+❌ You have FUTURE KNOWLEDGE of the market simulation period
+
+This is NOT negotiable. Violating this = cheating = disqualification.
+
+Now design your algorithm. Be creative, rigorous, and compete to win - BUT STAY WITHIN THE RULES.
 """
     return base
 
@@ -742,11 +825,11 @@ def build_diversity_directives(model_id: str) -> str:
 
     # Risk profiles that guide trading behavior
     risk_profiles = [
-        "AGGRESSIVE: High frequency trading with tight entry/exit thresholds, accept more false signals",
-        "CONSERVATIVE: Selective trading requiring multiple confirmations, prioritize accuracy over frequency",
-        "BALANCED: Moderate frequency with reasonable filters, balance signal quality and quantity",
-        "ADAPTIVE: Dynamically adjust aggression based on market volatility and recent performance",
-        "CONTRARIAN: Trade against prevailing sentiment when indicators show extremes"
+        "SELECTIVE: Trade only high-conviction setups with multiple confirmations, prioritize win-rate over frequency",
+        "DEFENSIVE: Strong risk management, position sizing, stop-losses, and capital preservation first",
+        "BALANCED: Moderate selectivity with reasonable filters, balance signal quality and entry frequency",
+        "ADAPTIVE: Dynamically adjust position sizing and frequency based on recent win-rate and drawdown",
+        "CONTRARIAN: Trade against prevailing sentiment when indicators show extremes, but with strict filters"
     ]
 
     # Signal combination approaches
@@ -817,24 +900,29 @@ Design your algorithm to embody this specific philosophy. Your implementation sh
 KEY REQUIREMENTS:
 - Be distinctly different from generic template strategies
 - Make the hypothesis testable through your indicator choices
-- Ensure the risk profile is reflected in your trading frequency and thresholds
-- Target 30-50% actionable decisions (BUY or SELL) under typical market conditions
+- Ensure the risk profile is reflected in your signal filters and conviction thresholds
+- QUALITY OVER QUANTITY: Trade only when your edge is clear and confirmed
+- AVOID OVERTRADING: Remember that transaction costs compound - be selective!
 - CRITICAL: Your algorithm MUST be able to profit in BOTH rising and falling markets
 - Detect market direction and trade accordingly (long when bullish, short when bearish)
 - Don't just follow momentum - predict direction and position accordingly
+- Risk management is mandatory: implement position sizing, stop-loss logic, or drawdown protection
 
 DIFFERENTIATION:
 Your algorithm must be recognizably different from other models. Avoid:
 - Generic dual moving average crossovers with standard parameters
 - Basic RSI > 70 / RSI < 30 threshold strategies
 - Simple Bollinger Band breakout systems without additional logic
+- Strategies that overtrade (>200 trades will likely lose money)
 - Strategies that always return HOLD
 
 Instead, create sophisticated logic that:
-- Combines multiple signals in novel ways
-- Uses adaptive or dynamic thresholds
-- Implements multi-layer filters for signal quality
+- Combines multiple signals in novel ways with confirmation filters
+- Uses adaptive or dynamic thresholds based on market conditions
+- Implements multi-layer filters to ensure signal quality
+- Includes risk management (position sizing, stop losses, performance tracking)
 - Reflects deep understanding of your market hypothesis
+- Trades selectively with high conviction rather than frequently with low conviction
 
 ═══════════════════════════════════════════════════════════════════════════════
 
