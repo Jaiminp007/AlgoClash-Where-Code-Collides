@@ -119,7 +119,6 @@ const Dashboard = () => {
   const pollingRef = useRef(null);
   const [showAllAlgos, setShowAllAlgos] = useState(false);
   const [chartData, setChartData] = useState([]);
-  const [savedSimulationData, setSavedSimulationData] = useState(null);
 
   // New state for preview modal
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -129,17 +128,6 @@ const Dashboard = () => {
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
   const [modelToReplace, setModelToReplace] = useState(null);
 
-  // Check for saved simulation on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lastSimulation');
-      if (saved) {
-        setSavedSimulationData(JSON.parse(saved));
-      }
-    } catch (err) {
-      console.error('Failed to load saved simulation:', err);
-    }
-  }, []);
 
   useEffect(() => {
     const apiBase = process.env.REACT_APP_API_BASE_URL || '';
@@ -579,19 +567,6 @@ const Dashboard = () => {
         // Update chart data one last time
         if (data.chart_data) {
           setChartData(data.chart_data);
-          // Save simulation data to localStorage for replay
-          try {
-            const simulationData = {
-              chartData: data.chart_data,
-              results: data.results,
-              timestamp: new Date().toISOString(),
-              stock: selectedStock,
-              agents: Object.values(selectedAgents).filter(Boolean)
-            };
-            localStorage.setItem('lastSimulation', JSON.stringify(simulationData));
-          } catch (err) {
-            console.error('Failed to save simulation data:', err);
-          }
         }
       } else if (data.status === 'error') {
         setSimulationStatus(`Error: ${data.error}`);
@@ -699,19 +674,6 @@ const Dashboard = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleReplaySimulation = () => {
-    if (!savedSimulationData) return;
-
-    // Load the saved simulation data
-    setChartData(savedSimulationData.chartData || []);
-    setSimulationResults(savedSimulationData.results || null);
-    setGenerationPhase('completed');
-    setProgress(100);
-    setSimulationStatus('Replaying saved simulation');
-    setIsRunning(false);
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   return (
     <div className="dashboard">
@@ -764,17 +726,8 @@ const Dashboard = () => {
         </nav>
       </header>
 
-      {/* Top controls below navbar: Stock selector and Replay button */}
+      {/* Top controls below navbar: Stock selector */}
       <div className="top-controls">
-        {savedSimulationData && generationPhase === 'idle' && (
-          <button
-            className="replay-sim-button"
-            onClick={handleReplaySimulation}
-            title={`Replay simulation from ${new Date(savedSimulationData.timestamp).toLocaleString()}`}
-          >
-            🔄 Replay Last Simulation
-          </button>
-        )}
         <div className="stock-selector-group">
           <label htmlFor="stock-select">Stock data:</label>
           {stocks.length > 0 ? (
