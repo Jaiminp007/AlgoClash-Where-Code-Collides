@@ -575,9 +575,9 @@ def run_simulation_only_background(sim_id, ticker, agents_list=None):
                     'agent_portfolios': tick_data.get('agent_portfolios', {})  # Add agent portfolio values
                 })
 
-                # Keep only last 100 ticks to avoid memory issues
-                if len(running_simulations[sim_id]["chart_data"]) > 100:
-                    running_simulations[sim_id]["chart_data"] = running_simulations[sim_id]["chart_data"][-100:]
+                # Keep only last 250 ticks (full simulation length)
+                if len(running_simulations[sim_id]["chart_data"]) > 250:
+                    running_simulations[sim_id]["chart_data"] = running_simulations[sim_id]["chart_data"][-250:]
 
             except Exception as e:
                 print(f"Tick callback error: {e}")
