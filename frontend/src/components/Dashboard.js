@@ -3,12 +3,89 @@ import { motion, AnimatePresence } from 'framer-motion';
 import './Dashboard.css';
 import CustomDropdown from './CustomDropdown';
 import AlgorithmCard from './AlgorithmCard';
-import ResultsDashboard from './ResultsDashboard';
 import AllAlgorithmsModal from './AllAlgorithmsModal';
 import ModelCard from './ModelCard';
 import AlgorithmPreviewModal from './AlgorithmPreviewModal';
 import ReplaceAgentModal from './ReplaceAgentModal';
 import MarketSimulationChart from './MarketSimulationChart';
+
+// Import provider icons
+import googlePng from '../assets/google.png';
+import anthropicPng from '../assets/anthropic.png';
+import openaiPng from '../assets/openai.png';
+import metaPng from '../assets/meta.png';
+import qwenPng from '../assets/qwen.png';
+import mistralPng from '../assets/mistral.png';
+import deepseekPng from '../assets/deepseek.png';
+import nousresearchPng from '../assets/nousresearch.png';
+import agenticaPng from '../assets/agentica.png';
+import moonshotaiPng from '../assets/moonshotai.png';
+import openrouterPng from '../assets/openrouter.png';
+import grokPng from '../assets/grok.png';
+import alibabaPng from '../assets/alibaba.png';
+import arliaiPng from '../assets/arliai.png';
+import cognitivecomputationsPng from '../assets/cognitivecomputations.png';
+import meituanPng from '../assets/meituan.png';
+import microsoftPng from '../assets/microsoft.png';
+import nvidiaPng from '../assets/nvidia.png';
+import shisaaiPng from '../assets/shisaai.png';
+import tencentPng from '../assets/tencent.png';
+import tngtechPng from '../assets/tngtech.png';
+import zaiPng from '../assets/zai.png';
+
+const providerIcons = {
+  google: googlePng,
+  anthropic: anthropicPng,
+  openai: openaiPng,
+  meta: metaPng,
+  qwen: qwenPng,
+  mistral: mistralPng,
+  mistralai: mistralPng,
+  deepseek: deepseekPng,
+  nousresearch: nousresearchPng,
+  agentica: agenticaPng,
+  moonshotai: moonshotaiPng,
+  openrouter: openrouterPng,
+  grok: grokPng,
+  'x-ai': grokPng,
+  alibaba: alibabaPng,
+  arliai: arliaiPng,
+  cognitivecomputations: cognitivecomputationsPng,
+  meituan: meituanPng,
+  microsoft: microsoftPng,
+  nvidia: nvidiaPng,
+  shisaai: shisaaiPng,
+  'shisa-ai': shisaaiPng,
+  tencent: tencentPng,
+  tngtech: tngtechPng,
+  zai: zaiPng,
+  'z-ai': zaiPng,
+};
+
+// Parse agent name to extract provider and model
+const parseAgentName = (fullName) => {
+  const withoutPrefix = fullName.replace(/^generated_algo_/, '');
+  const parts = withoutPrefix.split('_');
+
+  if (parts.length === 0) return { provider: '', model: fullName, displayName: fullName };
+
+  const provider = parts[0].toLowerCase();
+  const modelParts = parts.slice(1);
+  const formattedModel = modelParts
+    .map((part, idx) => {
+      const prevPart = idx > 0 ? modelParts[idx - 1] : '';
+      if (/^\d+$/.test(part) && /^\d+$/.test(prevPart)) {
+        return `.${part}`;
+      }
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ')
+    .replace(/\s+\./g, '.')
+    .replace(/_free$/i, '')
+    .replace(/\s+Free$/i, '');
+
+  return { provider, model: formattedModel, displayName: formattedModel };
+};
 
 const Dashboard = () => {
   const [active, setActive] = useState('home');
@@ -935,19 +1012,101 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Results Display */}
+        {/* Results Display - Side by Side Layout */}
         {simulationResults && generationPhase === 'completed' && (
           <div className="results-overlay">
-            <div className="results-modal">
-              {/* Chart Section - Preserved from simulation */}
-              {chartData && chartData.length > 0 && (
-                <div className="results-chart-section">
-                  <MarketSimulationChart chartData={chartData} />
+            <div className="results-modal-wide">
+              {/* Winner Banner at Top */}
+              {simulationResults.winner && (
+                <div className="winner-banner">
+                  <div className="trophy-large">🏆</div>
+                  <div className="winner-info-banner">
+                    <div className="winner-label">WINNER</div>
+                    <div className="winner-name-large">{simulationResults.winner.name}</div>
+                    <div className="winner-roi-large">
+                      ROI: <span className={simulationResults.winner.roi >= 0 ? 'positive' : 'negative'}>
+                        {simulationResults.winner.roi >= 0 ? '+' : ''}{((simulationResults.winner.roi || 0) * 100).toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* Leaderboard Section */}
-              <ResultsDashboard results={simulationResults} onBack={handleBack} />
+              {/* Side by Side Content */}
+              <div className="results-content-split">
+                {/* Left: Chart */}
+                <div className="results-chart-container">
+                  {chartData && chartData.length > 0 && (
+                    <MarketSimulationChart chartData={chartData} hideAgentCards={true} />
+                  )}
+                </div>
+
+                {/* Right: Leaderboard styled as agent cards */}
+                <div className="results-leaderboard-container">
+                  <h3 className="leaderboard-title">📊 Final Rankings</h3>
+                  <div className="leaderboard-cards">
+                    {simulationResults.leaderboard && simulationResults.leaderboard.map((agent, index) => {
+                      const { provider, displayName } = parseAgentName(agent.name);
+                      const icon = providerIcons[provider];
+                      const initialCash = agent.initial_value || 10000;
+                      const finalCash = agent.cash || 0;
+                      const initialStock = agent.initial_stock || 0;
+                      const finalStock = agent.stock || 0;
+                      const roi = ((agent.roi || 0) * 100).toFixed(2);
+
+                      return (
+                        <div key={agent.name} className={`leaderboard-card rank-${index + 1}`}>
+                          {/* Header with Rank and Agent Info */}
+                          <div className="leaderboard-rank-header">
+                            <div className="agent-card-header">
+                              {icon && <img src={icon} alt={provider} className="agent-provider-icon-small" />}
+                              <div className="agent-card-name">{displayName}</div>
+                            </div>
+                            <div className="rank-badge">
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                            </div>
+                          </div>
+
+                          {/* Body with Stats */}
+                          <div className="leaderboard-card-body">
+                            <div className="leaderboard-stat-row">
+                              <span className="stat-label-lb">ROI</span>
+                              <span className={`stat-value-lb-large ${agent.roi >= 0 ? 'positive' : 'negative'}`}>
+                                {agent.roi >= 0 ? '+' : ''}{roi}%
+                              </span>
+                            </div>
+                            <div className="leaderboard-stat-row">
+                              <span className="stat-label-lb">Initial Cash</span>
+                              <span className="stat-value-lb">${initialCash.toLocaleString()}</span>
+                            </div>
+                            <div className="leaderboard-stat-row">
+                              <span className="stat-label-lb">Final Cash</span>
+                              <span className="stat-value-lb">${finalCash.toLocaleString()}</span>
+                            </div>
+                            <div className="leaderboard-stat-row">
+                              <span className="stat-label-lb">Initial Stock</span>
+                              <span className="stat-value-lb">{initialStock}</span>
+                            </div>
+                            <div className="leaderboard-stat-row">
+                              <span className="stat-label-lb">Final Stock</span>
+                              <span className="stat-value-lb">{finalStock}</span>
+                            </div>
+                            <div className="leaderboard-stat-row">
+                              <span className="stat-label-lb">Trades</span>
+                              <span className="stat-value-lb">{agent.trades || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Back Button */}
+                  <button onClick={handleBack} className="back-button-results">
+                    ← Back to Dashboard
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

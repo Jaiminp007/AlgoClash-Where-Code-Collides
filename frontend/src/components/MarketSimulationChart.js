@@ -12,7 +12,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import './MarketSimulationChart.css';
 
-const MarketSimulationChart = ({ chartData }) => {
+const MarketSimulationChart = ({ chartData, hideAgentCards = false }) => {
   const chartRef = useRef(null);
 
   // Agent color palette - vibrant colors for visibility
@@ -387,10 +387,12 @@ const MarketSimulationChart = ({ chartData }) => {
           </div>
         </div>
 
-        {/* Right side: Agent stat cards */}
-        <div className="stats-section">
-          {renderAgentStatCards()}
-        </div>
+        {/* Right side: Agent stat cards - hidden in results view */}
+        {!hideAgentCards && (
+          <div className="stats-section">
+            {renderAgentStatCards()}
+          </div>
+        )}
       </div>
     </>
   );

@@ -419,6 +419,16 @@ CRITICAL TRADING RULES:
     - PROFIT IN ANY MARKET: Make money whether prices go up OR down
     - Detect market direction and trade accordingly (long in uptrends, short in downtrends)
 
+AGGRESSIVE TRADING MANDATE:
+    - This is a COMPETITION - you MUST trade aggressively to maximize ROI
+    - Trade FREQUENTLY - aim for multiple trades per simulation (avoid excessive HOLDs)
+    - Use LEVERAGE - take advantage of margin and short selling capabilities
+    - TAKE RISKS - conservative strategies will lose to aggressive ones
+    - Focus on MAXIMUM PROFIT - small gains are not enough to win
+    - React QUICKLY to market movements - hesitation costs money
+    - Don't be afraid to go ALL-IN on high-conviction trades
+    - Use your full buying power and shorting capacity when signals are strong
+
 Output format:
     - Raw Python code ONLY
     - No markdown code fences (no ```)
@@ -440,7 +450,7 @@ CRITICAL CONSTRAINTS:
     - You do NOT receive current market price as a parameter
     - You do NOT have access to live price feeds during execution
     - The simulation engine handles all market data internally
-    - Your function will be called 60+ times during a 15-second simulation
+    - Your function will be called 250+ times during the simulation
 
 RECOMMENDED APPROACH - Stateful Trading Logic:
 
