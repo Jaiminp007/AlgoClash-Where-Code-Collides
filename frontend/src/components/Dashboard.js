@@ -383,14 +383,21 @@ const Dashboard = () => {
           return acc;
         }, {});
 
+        // Build a normalized lookup for model states
+        const statesLookup = Object.entries(model_states).reduce((acc, [k, v]) => {
+          acc[normalizeModelId(k)] = v;
+          return acc;
+        }, {});
+
         // Check if any current session agent is still generating
         const stillGenerating = currentSessionAgents.some(agent =>
-          model_states[agent] === 'generating'
+          statesLookup[normalizeModelId(agent)] === 'generating'
         );
 
         console.log('Generation status check:', {
           currentSessionAgents,
           model_states,
+          statesLookup,
           stillGenerating
         });
 
@@ -402,8 +409,9 @@ const Dashboard = () => {
 
           // Update what we have so far
           setGeneratedAlgos(prev => prev.map(algo => {
-            const code = algoLookup[normalizeModelId(algo.modelName)] || algo.code;
-            const state = model_states[algo.modelName];
+            const normId = normalizeModelId(algo.modelName);
+            const code = algoLookup[normId] || algo.code;
+            const state = statesLookup[normId];
             const status = state === 'done' ? 'completed' : (state === 'error' ? 'failed' : 'generating');
             return { ...algo, code, status };
           }));
@@ -427,8 +435,12 @@ const Dashboard = () => {
           // Update any existing entries by normalized id
           const seen = new Set(base.map(a => normalizeModelId(a.modelName)));
           base = base.map(algo => {
-            const code = algoLookup[normalizeModelId(algo.modelName)] || '';
-            return { ...algo, code, status: code ? 'completed' : 'failed' };
+            const normId = normalizeModelId(algo.modelName);
+            const code = algoLookup[normId] || '';
+            const state = statesLookup[normId];
+            // Use model_states to determine status, fallback to code-based check
+            const status = state === 'done' ? 'completed' : (state === 'error' ? 'failed' : (code ? 'completed' : 'failed'));
+            return { ...algo, code, status };
           });
 
           // Append any new algorithms that were not in base
@@ -463,28 +475,42 @@ const Dashboard = () => {
         setProgress(Math.min(45, pct)); // Cap at 45% during generation
 
         // Update algorithm codes as they arrive
-        if (data.algorithms) {
+        if (data.algorithms || data.failures) {
           // Get the current session's agents
           const currentSessionAgents = JSON.parse(sessionStorage.getItem('currentSessionAgents') || '[]');
           const currentSessionSet = new Set(currentSessionAgents.map(a => normalizeModelId(a)));
 
           // Filter to only include algorithms for current session agents
-          const algoLookup = Object.entries(data.algorithms).reduce((acc, [k, v]) => {
+          const algoLookup = Object.entries(data.algorithms || {}).reduce((acc, [k, v]) => {
             if (currentSessionSet.has(normalizeModelId(k))) {
               acc[normalizeModelId(k)] = v;
             }
             return acc;
           }, {});
+          
+          // Lookup failures
+          const failureLookup = Object.entries(data.failures || {}).reduce((acc, [k, v]) => {
+             acc[normalizeModelId(k)] = v;
+             return acc;
+          }, {});
+
           setGeneratedAlgos(prev => {
             const list = prev && prev.length ? [...prev] : [];
             const existing = new Set(list.map(a => normalizeModelId(a.modelName)));
             // Update existing
             const updated = list.map(algo => {
-              const code = algoLookup[normalizeModelId(algo.modelName)];
-              return { ...algo, code: code || algo.code, status: code ? 'completed' : algo.status };
+              const normId = normalizeModelId(algo.modelName);
+              const code = algoLookup[normId];
+              const failure = failureLookup[normId];
+              
+              let status = algo.status;
+              if (code) status = 'completed';
+              else if (failure) status = 'failed';
+              
+              return { ...algo, code: code || algo.code, status: status };
             });
             // Append new ones that arrived but weren't seeded yet
-            Object.entries(data.algorithms).forEach(([k, v]) => {
+            Object.entries(data.algorithms || {}).forEach(([k, v]) => {
               const nk = normalizeModelId(k);
               if (!existing.has(nk)) {
                 updated.push({ modelName: k, code: v || '', status: v ? 'completed' : 'generating', index: updated.length });
@@ -647,6 +673,21 @@ const Dashboard = () => {
     if (pollingRef.current) {
       clearTimeout(pollingRef.current);
       pollingRef.current = null;
+    }
+
+    // Call cleanup API to remove generated algorithm files
+    // (algorithms are already saved in MongoDB)
+    if (currentGenId) {
+      fetch(`http://localhost:5000/api/cleanup/${currentGenId}`, {
+        method: 'POST',
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Cleanup result:', data);
+        })
+        .catch(error => {
+          console.error('Cleanup error:', error);
+        });
     }
 
     // Return to instruction screen; keep agent selections

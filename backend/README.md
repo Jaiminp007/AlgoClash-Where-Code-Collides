@@ -20,15 +20,13 @@ The AI Trading Battlefield consists of several interconnected components:
 │   └── __init__.py          # Module interface
 ├── 📁 Generated Algorithms (generate_algo/)
 │   └── generated_algo_*.py  # AI-generated trading strategies
-├── 📊 Data (data/)
-│   └── stock_data.csv       # Historical market data
 └── 🚀 main.py               # Application entry point
 ```
 
 ## ✨ Key Features
 
 ### 🔥 Real-Time Market Simulation
-- **Yahoo Finance Integration**: Live market data for AAPL and other stocks
+- **MongoDB Integration**: Historical market data for AAPL and other stocks
 - **Professional Order Book**: Realistic bid/ask matching and trade execution
 - **Multiple Agent Support**: Unlimited trading agents can compete simultaneously
 - **Live Performance Tracking**: Real-time ROI calculations and leaderboards
@@ -191,7 +189,8 @@ generate_algorithms()
 - **AlgoAgent**: Wrapper for AI-generated strategies
 
 ### Data Provider
-- **YFinanceTickGenerator**: Live market data
+- **MongoDBTickGenerator**: Historical market data from MongoDB
+- **YFinanceTickGenerator**: Live market data (fallback)
 - **Historical replay**: Use past price data
 - **Multiple timeframes**: 1m, 5m, 1h, 1d intervals
 - **Multiple symbols**: AAPL, GOOGL, TSLA, etc.

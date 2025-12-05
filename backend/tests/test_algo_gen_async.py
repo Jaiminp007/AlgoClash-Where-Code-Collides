@@ -124,7 +124,7 @@ async def test_concurrent_execution():
     # Track when each request starts and completes
     events = []
 
-    async def mock_generate(client, model_id, prompt):
+    async def mock_generate(client, model_id, prompt, **kwargs):
         events.append(f"start:{model_id}")
         await asyncio.sleep(0.1)  # Simulate API latency
         events.append(f"end:{model_id}")
@@ -166,7 +166,7 @@ async def test_output_order_preserved():
     models = [f"model-{i}" for i in range(6)]
     results_order = []
 
-    async def mock_generate(client, model_id, prompt):
+    async def mock_generate(client, model_id, prompt, **kwargs):
         # Add random delay to simulate different response times
         await asyncio.sleep(0.01 * (6 - int(model_id.split('-')[1])))  # Reverse order delays
         return f"def execute_trade(ticker, cash_balance, shares_held):\n    # {model_id}\n    return 'HOLD'"
@@ -206,7 +206,7 @@ async def test_partial_failure_handling():
 
     models = [f"model-{i}" for i in range(6)]
 
-    async def mock_generate(client, model_id, prompt):
+    async def mock_generate(client, model_id, prompt, **kwargs):
         # Fail for even-numbered models
         model_num = int(model_id.split('-')[1])
         if model_num % 2 == 0:
@@ -242,7 +242,7 @@ async def test_all_failures():
 
     models = [f"model-{i}" for i in range(6)]
 
-    async def mock_generate(client, model_id, prompt):
+    async def mock_generate(client, model_id, prompt, **kwargs):
         return None  # All fail
 
     with patch('open_router.algo_gen.generate_algorithm_async', side_effect=mock_generate):
@@ -267,7 +267,7 @@ async def test_semaphore_limits_concurrency():
     active_requests = []
     max_concurrent = 0
 
-    async def mock_generate(client, model_id, prompt):
+    async def mock_generate(client, model_id, prompt, **kwargs):
         nonlocal max_concurrent
         active_requests.append(model_id)
         max_concurrent = max(max_concurrent, len(active_requests))

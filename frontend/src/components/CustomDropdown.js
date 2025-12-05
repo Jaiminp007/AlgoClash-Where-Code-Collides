@@ -25,6 +25,15 @@ import tencentIcon from '../assets/tencent.png';
 import tngtechIcon from '../assets/tngtech.png';
 import zaiIcon from '../assets/zai.png';
 
+const RECOMMENDED_AGENTS = [
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "deepseek/deepseek-chat-v3.1:free",
+  "qwen/qwen-2.5-72b-instruct:free",
+  "google/gemini-2.5-flash",
+  "mistralai/mistral-small-3.2-24b-instruct:free",
+  "microsoft/mai-ds-r1:free"
+];
+
 const imageMap = {
   'Anthropic': anthropicIcon,
   'DeepSeek': deepseekIcon,
@@ -79,6 +88,11 @@ const CustomDropdown = ({ agents, selected, onSelect, disabledAgents = new Set()
 
   const selectedCompany = getCompanyFromAgent(selected);
 
+  // Filter recommended agents that are actually available
+  const recommendedList = RECOMMENDED_AGENTS.filter(agent => 
+    Object.values(agents).flat().includes(agent)
+  );
+
   return (
     <div className="custom-dropdown" ref={dropdownRef}>
       <div className="dropdown-selected" onClick={() => setIsOpen(!isOpen)}>
@@ -94,29 +108,61 @@ const CustomDropdown = ({ agents, selected, onSelect, disabledAgents = new Set()
       </div>
       {isOpen && (
         <div className="dropdown-options">
-          {Object.entries(agents).map(([company, agentList]) => (
-            <div key={company}>
-              <div className="dropdown-company-header">{company}</div>
-              {agentList.map((agent) => (
+          {/* Recommended Section */}
+          {recommendedList.length > 0 && (
+            <div key="Recommended">
+              <div className="dropdown-company-header">✨ Recommended</div>
+              {recommendedList.map((agent) => (
                 <div
-                  key={agent}
+                  key={`rec-${agent}`}
                   className={`dropdown-option ${selected === agent ? 'selected' : ''} ${disabledAgents.has(agent) && selected !== agent ? 'disabled' : ''}`}
                   aria-disabled={disabledAgents.has(agent) && selected !== agent}
                   onClick={() => {
-                    if (disabledAgents.has(agent) && selected !== agent) return; // prevent selecting duplicates
+                    if (disabledAgents.has(agent) && selected !== agent) return;
                     handleSelect(agent);
                   }}
                 >
                   <img 
-                    src={imageMap[company]} 
-                    alt={company} 
+                    src={imageMap[getCompanyFromAgent(agent)]} 
+                    alt="Recommended" 
                     className="agent-icon-option"
                   />
                   <span>{agent.split('/')[1]}</span>
                 </div>
               ))}
             </div>
-          ))}
+          )}
+
+          {Object.entries(agents).map(([company, agentList]) => {
+            // Filter out recommended agents from the main list to avoid duplicates
+            const filteredList = agentList.filter(agent => !recommendedList.includes(agent));
+            
+            if (filteredList.length === 0) return null;
+
+            return (
+              <div key={company}>
+                <div className="dropdown-company-header">{company}</div>
+                {filteredList.map((agent) => (
+                  <div
+                    key={agent}
+                    className={`dropdown-option ${selected === agent ? 'selected' : ''} ${disabledAgents.has(agent) && selected !== agent ? 'disabled' : ''}`}
+                    aria-disabled={disabledAgents.has(agent) && selected !== agent}
+                    onClick={() => {
+                      if (disabledAgents.has(agent) && selected !== agent) return; // prevent selecting duplicates
+                      handleSelect(agent);
+                    }}
+                  >
+                    <img 
+                      src={imageMap[company]} 
+                      alt={company} 
+                      className="agent-icon-option"
+                    />
+                    <span>{agent.split('/')[1]}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -6,20 +6,42 @@ const AlgorithmPreviewModal = ({ isOpen, onClose, modelName, code }) => {
   const modalRef = useRef(null);
   const previousFocusRef = useRef(null);
 
+  // Ensure code is a string (handle cases where it might be an object or null)
+  const codeString = React.useMemo(() => {
+    if (!code) return '';
+    if (typeof code === 'string') return code;
+    // If code is an object (MongoDB nested issue), try to extract the string
+    if (typeof code === 'object') {
+      // Try to find the actual code string in nested object
+      const extractCode = (obj) => {
+        if (typeof obj === 'string') return obj;
+        if (typeof obj === 'object' && obj !== null) {
+          for (const key of Object.keys(obj)) {
+            const result = extractCode(obj[key]);
+            if (result && result.includes('def ')) return result;
+          }
+        }
+        return '';
+      };
+      return extractCode(code);
+    }
+    return String(code);
+  }, [code]);
+
   const normalizeModelName = (name) => {
     return String(name).split('/').pop().replace(':free', '');
   };
 
   // Debug: Log code length when modal opens
   useEffect(() => {
-    if (isOpen && code) {
+    if (isOpen && codeString) {
       console.log('Modal opened with code:', {
-        lines: code.split('\n').length,
-        chars: code.length,
-        preview: code.substring(0, 100) + '...'
+        lines: codeString.split('\n').length,
+        chars: codeString.length,
+        preview: codeString.substring(0, 100) + '...'
       });
     }
-  }, [isOpen, code]);
+  }, [isOpen, codeString]);
 
   useEffect(() => {
     if (isOpen) {
@@ -80,7 +102,7 @@ const AlgorithmPreviewModal = ({ isOpen, onClose, modelName, code }) => {
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(codeString);
       // Visual feedback
       const button = document.getElementById('copy-modal-btn');
       if (button) {
@@ -98,7 +120,7 @@ const AlgorithmPreviewModal = ({ isOpen, onClose, modelName, code }) => {
   };
 
   const downloadAlgorithm = () => {
-    const blob = new Blob([code], { type: 'text/plain' });
+    const blob = new Blob([codeString], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -203,10 +225,10 @@ const AlgorithmPreviewModal = ({ isOpen, onClose, modelName, code }) => {
 
             <div className="preview-modal-body">
               <div className="code-stats">
-                {code && `${code.split('\n').length} lines • ${Math.round(code.length / 1024)}KB`}
+                {codeString && `${codeString.split('\n').length} lines • ${Math.round(codeString.length / 1024)}KB`}
               </div>
               <pre className="preview-code-block">
-                <code>{code || '// No code available yet...'}</code>
+                <code>{codeString || '// No code available yet...'}</code>
               </pre>
             </div>
           </motion.div>
