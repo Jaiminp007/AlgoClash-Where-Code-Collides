@@ -11,15 +11,16 @@ import shutil
 # Add the open_router directory to path for imports
 sys.path.append(str(Path(__file__).resolve().parent / "open_router"))
 
-from market.tick_generator import CSVTickGenerator, display_stock_chart
+from market.tick_generator import MongoDBTickGenerator, display_stock_chart
 from market.market_simulation import MarketSimulation
 from market.agent import MarketMakerAgent
-from generate_stock_data import generate_stock_data_for_ticker
+# from generate_stock_data import generate_stock_data_for_ticker  <-- Removed
 
 import warnings
 from typing import Callable, Dict, Any, List
 import uuid
 import importlib.util
+import inspect
 
 # Optimized AlgoAgent that loads the module once and calls it directly
 class AlgoAgent:
@@ -28,37 +29,89 @@ class AlgoAgent:
         self.symbol = symbol
         self._module_path = module_path
         self._hold_streak = 0  # Count consecutive HOLDs to seed positions
-        self._trade_function = self._load_module()
+        # Load once; keep original function and its signature for best-effort compatibility
+        self._trade_function, self._trade_sig = self._load_module()
+        # Store the original algorithm code for adaptation prompts
+        self._algorithm_code = self._load_algorithm_code()
         # Per-agent deterministic behavior parameters to diversify actions
         seed_int = int(hashlib.md5(self.name.encode()).hexdigest()[:8], 16)
         self._rng = random.Random(seed_int)
-        # Trade frequency throttle: some agents act every tick, others every 2nd/3rd tick
-        self._tick_skip_mod = self._rng.choice([1, 1, 1, 2])
-        # Position sizing (fractions of affordable/held)
-        self._buy_frac_lo = self._rng.uniform(0.05, 0.15)
-        self._buy_frac_hi = min(0.60, self._buy_frac_lo + self._rng.uniform(0.05, 0.25))
-        self._sell_frac = self._rng.uniform(0.10, 0.50)
-        # Limit price offsets in basis points (bps)
-        self._buy_bps = self._rng.uniform(10.0, 40.0)   # 0.10% - 0.40% above market
-        self._sell_bps = self._rng.uniform(10.0, 40.0)  # 0.10% - 0.40% below market
-        # HOLD seeding cadence and preference
-        self._seed_ticks = self._rng.randint(2, 5)
+        # Trade frequency throttle: DISABLED - let all agents act every tick for max trades
+        self._tick_skip_mod = 1  # Always trade every tick
+        # Position sizing: MORE AGGRESSIVE for higher ROI with leverage
+        self._buy_frac_lo = self._rng.uniform(0.15, 0.30)
+        self._buy_frac_hi = min(0.80, self._buy_frac_lo + self._rng.uniform(0.20, 0.40))
+        self._sell_frac = self._rng.uniform(0.30, 0.70)
+        # Limit price offsets in basis points (bps) - TIGHTER for faster fills
+        self._buy_bps = self._rng.uniform(5.0, 15.0)   # 0.05% - 0.15% above market
+        self._sell_bps = self._rng.uniform(5.0, 15.0)  # 0.05% - 0.15% below market
+        # HOLD seeding cadence and preference - MORE AGGRESSIVE
+        self._seed_ticks = self._rng.randint(1, 3)  # Seed faster
         self._seed_prefer_sell = self._rng.choice([True, False])
         print(f"✅ {self.name}: Loaded with direct import optimization")
+    
+    def _load_algorithm_code(self) -> str:
+        """Load the algorithm source code for adaptation prompts."""
+        try:
+            with open(self._module_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception:
+            return ""
 
-    def _load_module(self) -> Callable[..., str]:
-        """Load the execute_trade function from the agent's module path."""
+    def _load_module(self) -> tuple[Callable[..., str], inspect.Signature | None]:
+        """Load the execute_trade function from the agent's module path and capture its signature."""
         try:
             spec = importlib.util.spec_from_file_location(self.name, self._module_path)
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 if hasattr(module, 'execute_trade') and callable(module.execute_trade):
-                    return module.execute_trade
+                    try:
+                        return module.execute_trade, inspect.signature(module.execute_trade)
+                    except Exception:
+                        # Signature inspection can fail for dynamically generated functions
+                        return module.execute_trade, None
         except Exception as e:
             print(f"❌ Error loading module for {self.name}: {e}")
         # Return a dummy function if loading fails
-        return lambda ticker, cash, stock: "HOLD"
+        return (lambda ticker, cash, stock: "HOLD"), None
+
+    def _call_trade(self, symbol: str, price: float, tick: int, cash: float, stock: int) -> str:
+        """Invoke execute_trade with best-effort compatibility across signatures.
+        Preferred signature: (symbol, price, tick, cash, stock)
+        Legacy supported: (symbol, price, cash, stock) or (symbol, cash, stock)
+        """
+        return self._call_trade_with_fn(self._trade_function, symbol, price, tick, cash, stock)
+    
+    def _call_trade_with_fn(self, fn, symbol: str, price: float, tick: int, cash: float, stock: int) -> str:
+        """Invoke a trade function with best-effort compatibility across signatures."""
+        try:
+            sig = None
+            try:
+                sig = inspect.signature(fn)
+            except Exception:
+                pass
+            
+            if sig is not None:
+                params = list(sig.parameters.keys())
+                # Newest: (symbol, price, tick, cash, stock)
+                if len(params) >= 5:
+                    return fn(symbol, price, tick, cash, stock)
+                # Transitional: (symbol, price, cash, stock)
+                if len(params) == 4:
+                    return fn(symbol, price, cash, stock)
+                # Legacy: (symbol, cash, stock)
+                return fn(symbol, cash, stock)
+            # No signature info; try newest then fallback
+            try:
+                return fn(symbol, price, tick, cash, stock)
+            except TypeError:
+                try:
+                    return fn(symbol, price, cash, stock)
+                except TypeError:
+                    return fn(symbol, cash, stock)
+        except Exception:
+            return "HOLD"
 
     def on_tick(self, price: float, current_tick: int, cash: float = 0.0, stock: int = 0):
         """Execute the AI-generated trading algorithm with optimized isolation."""
@@ -67,19 +120,31 @@ class AlgoAgent:
             if self._tick_skip_mod > 1 and (current_tick % self._tick_skip_mod != 0):
                 return []
 
-            # Execute the AI algorithm's decision function directly
-            decision = self._trade_function(self.symbol, cash, stock)
+            # Use hot-swapped execute_trade if available, otherwise use original
+            trade_fn = getattr(self, 'execute_trade_fn', None) or self._trade_function
+            
+            # Execute the AI algorithm's decision function directly (with price/tick awareness when supported)
+            decision = self._call_trade_with_fn(trade_fn, self.symbol, price, current_tick, cash, stock)
+            
+            # Parse decision - can be "BUY", "SELL", "HOLD" or tuple like ("BUY", 10)
+            action = decision
+            specified_qty = None
+            if isinstance(decision, tuple) and len(decision) >= 2:
+                action = decision[0]
+                specified_qty = int(decision[1]) if decision[1] else None
             
             # Process the AI's decision (un-gated to allow margin/short; engine clamps size)
-            if decision == "BUY":
+            if action == "BUY":
                 self._hold_streak = 0
-                qty = self._rng.randint(5, 18)
+                # Use specified quantity or AGGRESSIVE default (use leverage: 100-200 shares)
+                qty = specified_qty if specified_qty else self._rng.randint(100, 200)
                 bid_price = round(price * (1.0 + self._buy_bps / 10000.0), 2)
                 return [{"agent": self.name, "side": "buy", "price": bid_price, "quantity": qty}]
 
-            elif decision == "SELL":
+            elif action == "SELL":
                 self._hold_streak = 0
-                qty = self._rng.randint(5, 18)
+                # Use specified quantity or AGGRESSIVE default (use leverage: 100-200 shares)
+                qty = specified_qty if specified_qty else self._rng.randint(100, 200)
                 ask_price = round(price * (1.0 - self._sell_bps / 10000.0), 2)
                 return [{"agent": self.name, "side": "sell", "price": ask_price, "quantity": qty}]
 
@@ -90,13 +155,13 @@ class AlgoAgent:
                     self._hold_streak = 0 # Reset after seeding
                     # Prefer a small sell if configured and we hold stock; otherwise seed a buy
                     if self._seed_prefer_sell and stock > 0:
-                        qty = max(1, min(3, stock))
+                        qty = max(5, min(30, stock))  # MORE AGGRESSIVE seeding
                         ask_price = round(price * (1.0 - self._sell_bps / 20000.0), 2)  # half offset
                         return [{"agent": self.name, "side": "sell", "price": ask_price, "quantity": qty}]
                     elif cash > price:
                         max_affordable = int(cash // price)
                         if max_affordable > 0:
-                            qty = max(1, min(3, max_affordable))
+                            qty = max(5, min(30, max_affordable))  # MORE AGGRESSIVE seeding
                             bid_price = round(price * (1.0 + self._buy_bps / 20000.0), 2)  # half offset
                             return [{"agent": self.name, "side": "buy", "price": bid_price, "quantity": qty}]
         
@@ -116,24 +181,10 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
     warnings.filterwarnings("ignore", category=FutureWarning)
     
     if progress_callback:
-        progress_callback(20, "Refreshing stock data cache...")
-
-    print("\n💾 STEP 1: Refreshing Stock Data Cache")
-    print("-" * 40)
-    refreshed = False
-    try:
-        refreshed = bool(generate_stock_data_for_ticker(symbol))
-    except Exception as refresh_error:
-        print(f"⚠️ Stock data refresh error: {refresh_error}")
-    if refreshed:
-        print(f"✅ Updated CSV data for {symbol}")
-    else:
-        print(f"⚠️ Using existing CSV data for {symbol}")
-    if progress_callback:
-        progress_callback(35, "Stock data ready, starting algorithm generation...")
+        progress_callback(35, "Starting algorithm generation...")
 
     # Generate algorithms for selected agents
-    print("\n🧠 STEP 2: Generating Trading Algorithms")
+    print("\n🧠 STEP 1: Generating Trading Algorithms")
     print("-" * 40)
 
     try:
@@ -152,11 +203,13 @@ def run_simulation_with_params(selected_agents, symbol, progress_callback=None):
     
     return run_market_simulation(symbol, progress_callback, allowed_models=selected_agents)
 
-def run_market_simulation(symbol, progress_callback=None, allowed_models: list[str] | None = None, tick_callback=None):
+def run_market_simulation(symbol, progress_callback=None, allowed_models: list[str] | None = None, tick_callback=None, enable_adaptation: bool = False, adaptation_callback=None):
     """Run the market simulation part
     allowed_models: Optional list of model IDs to include (e.g., 'anthropic/claude-haiku-4.5').
     When provided, only algorithms with matching sanitized filenames will be loaded.
     tick_callback: Optional callback function called on each tick with (tick_num, tick_data, trades)
+    enable_adaptation: Whether to enable mid-simulation algorithm adaptation at checkpoints
+    adaptation_callback: Async callback for adaptation: (agents_data, checkpoint_num) -> Dict[agent_name, new_code]
     """
     if progress_callback:
         progress_callback(65, "Preparing stock chart...")
@@ -180,9 +233,15 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     print("\n🏦 STEP 3: Starting Market Simulation")
     print("-" * 40)
     
-    # Create tick generator from CSV files (faster, no network required)
-    # CSV files are pre-downloaded and stored in backend/data/
-    tick_src = CSVTickGenerator(symbol=symbol).stream(sleep_seconds=0.25)  # 0.25s per tick = ~62s for 250 ticks
+    # Create tick generator from MongoDB
+    
+    tick_gen = MongoDBTickGenerator(symbol=symbol)
+    if tick_gen.data:
+        print(f"✅ Using MongoDB data for simulation ({len(tick_gen.data)} ticks)")
+        tick_src = tick_gen.stream(sleep_seconds=0.25)
+    else:
+        print("❌ MongoDB data unavailable. Please ensure data is populated in the database.")
+        return
 
     # Discover generated algorithm modules
     base_gen = Path(__file__).resolve().parent / "generate_algo"
@@ -282,21 +341,25 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     # Create simulation with ORDER BOOK ENABLED and slower pacing for visibility
     from market.market_simulation import SimulationConfig
     config = SimulationConfig(
-        max_ticks=250,  # 250 ticks at 0.25s each = ~62 seconds total
+        max_ticks=390,  # 390 ticks at 0.25s each = ~97.5 seconds total (full trading day)
         tick_sleep=0.25,  # 250ms between ticks for visibility
         log_trades=True,
         log_orders=False,  # Disable for cleaner logs
         enable_order_book=True,  # ENABLE ORDER BOOK for proper matching
         initial_cash=10000.0,
-        initial_stock=0,  # CHANGED: Start with cash only for clearer ROI
-    mm_initial_stock=150,
+        initial_stock=0,  # Start with 0 stock - AIs must trade to build positions
+        mm_initial_stock=150,  # Market makers need stock to provide liquidity
         # Enable margin and short selling to increase volume/ROE dispersion
         allow_negative_cash=True,
         cash_borrow_limit=40000.0,  # INCREASED: 4x initial cash leverage
         allow_short=True,
-    max_short_shares=150,  # INCREASED: Can short 1.5x more shares
+        max_short_shares=250,  # INCREASED: Can short 1.5x more shares
         # Expire unfilled limit orders each tick to free reservations
-        order_ttl_ticks=1
+        order_ttl_ticks=1,
+        # Mid-simulation adaptation settings
+        enable_adaptation=enable_adaptation,
+        adaptation_checkpoints=[130, 260],  # Pause at 130 and 260 ticks (3 phases of ~130 each)
+        adaptation_callback=adaptation_callback
     )
 
     sim = MarketSimulation(agents, config, tick_callback=tick_callback)
@@ -305,7 +368,7 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
     try:
         if progress_callback:
             progress_callback(90, "Running market simulation...")
-        results = sim.run(ticks=tick_src, max_ticks=250, log=True)  # 250 ticks for extended simulation
+        results = sim.run(ticks=tick_src, max_ticks=390, log=True)  # 390 ticks for full trading day simulation
         if progress_callback:
             progress_callback(95, "Calculating final results...")
     except KeyboardInterrupt:
@@ -365,14 +428,8 @@ def run_market_simulation(symbol, progress_callback=None, allowed_models: list[s
             else:
                 print(f"  {i}. {row['name']}: {row['roi']*100:+.2f}% ROI")
     
-    # Cleanup: delete generated algorithms after simulation
-    try:
-        gen_dir = Path(__file__).resolve().parent / "generate_algo"
-        if gen_dir.exists() and gen_dir.is_dir():
-            shutil.rmtree(gen_dir, ignore_errors=True)
-            print("🧹 Cleaned up generated algorithms folder.")
-    except Exception as ce:
-        print(f"⚠️ Cleanup warning: {ce}")
+    # NOTE: Algorithm cleanup is now handled by explicit API call when user returns to dashboard
+    # Algorithms are stored in MongoDB with simulation results before cleanup
 
     # Return results for API
     return {

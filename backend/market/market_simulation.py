@@ -6,7 +6,17 @@ Main orchestrator for the trading simulation that coordinates agents, order book
 import time
 from typing import List, Dict, Any, Iterator, Optional
 from dataclasses import dataclass
+from datetime import datetime
 import uuid
+
+# Database helpers for Mongo-backed tick streams
+try:
+    from database import get_db
+except ImportError:
+    try:
+        from ..database import get_db  # type: ignore
+    except ImportError:
+        get_db = None  # Fallback when running standalone
 
 from .order_book import OrderBook, Order, OrderSide, OrderType
 from .tick_generator import TickData
@@ -32,6 +42,59 @@ class SimulationConfig:
     max_short_shares: int = 0        # Max magnitude of negative stock allowed
     # Order expiration (in ticks). 0 means orders persist; >0 expire after N ticks
     order_ttl_ticks: int = 0
+    # Mid-simulation adaptation settings
+    enable_adaptation: bool = False  # Whether to allow algorithm adaptation at checkpoints
+    adaptation_checkpoints: List[int] = None  # Tick numbers to pause for adaptation (default: [130, 260])
+    adaptation_callback: Any = None  # Async callback for adaptation: (agent_name, performance_data) -> Optional[new_code]
+
+
+class MongoDBTickGenerator:
+    """Stream tick data from MongoDB collections like AAPL_simulation."""
+
+    def __init__(self, ticker: str):
+        if get_db is None:
+            raise RuntimeError("MongoDB connection helper get_db is unavailable")
+        self.ticker = ticker.upper()
+        self.db = get_db()
+        if self.db is None:
+            raise RuntimeError("Failed to connect to MongoDB")
+        self.collection_name = f"{self.ticker}_simulation"
+        self.collection = self.db[self.collection_name]
+
+    def stream(self, sleep_seconds: float = 0.0) -> Iterator[TickData]:
+        """Yield TickData rows ordered by timestamp."""
+        cursor = self.collection.find().sort("datetime", 1)
+        total = self.collection.count_documents({})
+        print(
+            f"📈 Loading {self.ticker} data from MongoDB collection '{self.collection_name}' ({total} records)..."
+        )
+        if total == 0:
+            print(f"⚠️ Warning: No simulation data found for {self.ticker}")
+
+        for doc in cursor:
+            dt_raw = doc.get("datetime")
+            if isinstance(dt_raw, str):
+                try:
+                    timestamp = datetime.strptime(dt_raw, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    timestamp = datetime.fromisoformat(dt_raw)
+            else:
+                timestamp = dt_raw
+
+            tick = TickData(
+                symbol=doc.get("ticker", self.ticker),
+                timestamp=timestamp,
+                open_price=float(doc.get("open", 0.0)),
+                high=float(doc.get("high", 0.0)),
+                low=float(doc.get("low", 0.0)),
+                close=float(doc.get("close", 0.0)),
+                volume=int(doc.get("volume", 0)),
+            )
+
+            yield tick
+
+            if sleep_seconds:
+                time.sleep(sleep_seconds)
 
 
 class MarketSimulation:
@@ -43,6 +106,7 @@ class MarketSimulation:
     - Trading agents and their decisions
     - Order book for trade matching
     - Portfolio management and performance tracking
+    - Mid-simulation algorithm adaptation at checkpoints
     """
     
     def __init__(self, agents: List[TradingAgent], config: Optional[SimulationConfig] = None, tick_callback=None):
@@ -58,6 +122,10 @@ class MarketSimulation:
         self.agent_manager = AgentManager()
         self.order_book = OrderBook()
         self.tick_callback = tick_callback
+        
+        # Set default adaptation checkpoints if not specified
+        if self.config.adaptation_checkpoints is None:
+            self.config.adaptation_checkpoints = [130, 260]  # Pause at 130 and 260 ticks (3 phases of 130 each)
         
         # Add all agents to the manager
         for agent in agents:
@@ -87,6 +155,12 @@ class MarketSimulation:
         self.is_running = False
         self.simulation_start_time = 0.0
         
+        # Price history for adaptation prompts
+        self.price_history: List[float] = []
+        
+        # Track adaptation events
+        self.adaptation_results: Dict[str, List[Dict[str, Any]]] = {}  # agent_name -> list of adaptation events
+        
         # Statistics
         self.total_trades = 0
         self.total_volume = 0
@@ -102,13 +176,21 @@ class MarketSimulation:
         self._agent_reserved_stock: Dict[str, int] = {}
         
         print(f"🏦 Market Simulation initialized with {len(agents)} agents")
+        if self.config.enable_adaptation:
+            print(f"🔄 Adaptation enabled at checkpoints: {self.config.adaptation_checkpoints}")
         
     @property
     def portfolio(self) -> Dict[str, Portfolio]:
         """Get current portfolios of all agents."""
         return self.agent_manager.portfolios
         
-    def run(self, ticks: Iterator[TickData], max_ticks: Optional[int] = None, log: bool = None) -> Dict[str, Any]:
+    def run(
+        self,
+        ticks: Optional[Iterator[TickData]] = None,
+        max_ticks: Optional[int] = None,
+        log: bool = None,
+        ticker: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Run the market simulation with the provided tick stream.
         
@@ -120,15 +202,26 @@ class MarketSimulation:
         Returns:
             Simulation results and statistics
         """
+        if ticks is None:
+            if not ticker:
+                raise ValueError("Simulation requires a tick iterator or a ticker for MongoDB streaming")
+            generator = MongoDBTickGenerator(ticker)
+            ticks = generator.stream(sleep_seconds=self.config.tick_sleep)
+
         max_ticks = max_ticks or self.config.max_ticks
         log = log if log is not None else self.config.log_trades
         
         print("🚀 Starting market simulation...")
         print(f"⚙️ Config: max_ticks={max_ticks}, agents={len(self.agent_manager.agents)}")
+        if self.config.enable_adaptation:
+            print(f"🔄 Adaptation checkpoints: {self.config.adaptation_checkpoints}")
         
         self.is_running = True
         self.simulation_start_time = time.time()
         self.current_tick = 0
+        
+        # Track which checkpoints we've hit
+        checkpoints_completed = set()
         
         try:
             for tick_data in ticks:
@@ -139,6 +232,28 @@ class MarketSimulation:
                 self._process_tick(tick_data, log)
                 self.current_tick += 1
                 
+                # Check for adaptation checkpoint
+                if self.config.enable_adaptation and self.config.adaptation_callback:
+                    for checkpoint in self.config.adaptation_checkpoints:
+                        if self.current_tick == checkpoint and checkpoint not in checkpoints_completed:
+                            checkpoints_completed.add(checkpoint)
+                            checkpoint_num = self.config.adaptation_checkpoints.index(checkpoint) + 1
+                            print(f"\\n{'='*60}")
+                            print(f"🔄 ADAPTATION CHECKPOINT {checkpoint_num} at tick {checkpoint}")
+                            print(f"{'='*60}")
+                            
+                            # Run adaptation for all agents
+                            self._run_adaptation_checkpoint(
+                                checkpoint_num=checkpoint_num,
+                                ticker=ticker or tick_data.symbol,
+                                total_ticks=max_ticks,
+                                log=log
+                            )
+                            
+                            print(f"{'='*60}")
+                            print(f"▶️ Resuming simulation...")
+                            print(f"{'='*60}\\n")
+                
                 # Allow for graceful interruption
                 if not self.is_running:
                     break
@@ -147,6 +262,8 @@ class MarketSimulation:
             print("\\n⏹️ Simulation interrupted by user")
         except Exception as e:
             print(f"\\n❌ Simulation error: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.is_running = False
             
@@ -156,6 +273,12 @@ class MarketSimulation:
         """Process a single market tick."""
         current_price = tick_data.close
         self.last_price = current_price
+        
+        # Track price history for adaptation prompts
+        self.price_history.append(current_price)
+        if len(self.price_history) > 100:  # Keep last 100 prices
+            self.price_history.pop(0)
+        
         # Initialize fair ROI baselines on the first observed price
         if self.first_price is None:
             self.first_price = current_price
@@ -230,6 +353,177 @@ class MarketSimulation:
                 )
             except Exception as e:
                 print(f"⚠️ Tick callback error: {e}")
+    
+    def _run_adaptation_checkpoint(
+        self,
+        checkpoint_num: int,
+        ticker: str,
+        total_ticks: int,
+        log: bool = True
+    ):
+        """
+        Run adaptation checkpoint for all agents.
+        
+        At each checkpoint, each agent is given:
+        - Their current ROI
+        - Their current algorithm code
+        - Market data and price history
+        
+        They can then choose to keep their algorithm or improve it.
+        """
+        import asyncio
+        
+        if not self.config.adaptation_callback:
+            return
+            
+        current_price = self.last_price
+        
+        # Collect performance data for each agent
+        adaptation_tasks = []
+        
+        for agent_name, agent in self.agent_manager.agents.items():
+            # Skip liquidity providers
+            if agent_name.startswith("Liquidity_"):
+                continue
+                
+            portfolio = self.agent_manager.portfolios[agent_name]
+            initial_value = self.agent_manager.initial_values.get(agent_name, 10000.0)
+            current_value = portfolio.get_total_value(current_price)
+            roi = (current_value - initial_value) / initial_value if initial_value > 0 else 0.0
+            
+            # Get agent's current algorithm code (if available)
+            current_code = getattr(agent, '_algorithm_code', None) or ""
+            
+            # Get agent's trade history for adaptation analysis
+            agent_trades = []
+            for trade in getattr(agent, 'trade_history', []):
+                agent_trades.append({
+                    'tick': getattr(trade, 'tick', 0),
+                    'action': 'BUY' if getattr(trade, 'side', '') == 'buy' else 'SELL',
+                    'shares': getattr(trade, 'quantity', 0),
+                    'price': getattr(trade, 'price', 0),
+                    'pnl': getattr(trade, 'pnl', 0) if hasattr(trade, 'pnl') else 0
+                })
+            
+            performance_data = {
+                'agent_name': agent_name,
+                'current_roi': roi,
+                'current_cash': portfolio.cash,
+                'current_shares': portfolio.stock,
+                'current_tick': self.current_tick,
+                'total_ticks': total_ticks,
+                'price_history': self.price_history[-100:],  # Last 100 prices for better analysis
+                'checkpoint_num': checkpoint_num,
+                'current_code': current_code,
+                'ticker': ticker,
+                'trades': agent_trades  # Include trade history for detailed analysis
+            }
+            
+            if log:
+                roi_pct = roi * 100
+                status = "✅" if roi_pct >= 0 else "❌"
+                print(f"  {status} {agent_name}: ROI={roi_pct:+.2f}%, Cash=${portfolio.cash:.2f}, Shares={portfolio.stock}")
+            
+            adaptation_tasks.append(performance_data)
+        
+        # Call the adaptation callback (runs async)
+        if adaptation_tasks:
+            print(f"\\n📤 Sending {len(adaptation_tasks)} agents for adaptation analysis...")
+            
+            try:
+                # Run the adaptation callback
+                # This is expected to be an async function that returns a dict of agent_name -> new_code
+                results = self.config.adaptation_callback(adaptation_tasks, checkpoint_num)
+                
+                # If it's a coroutine, run it
+                if asyncio.iscoroutine(results):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        results = loop.run_until_complete(results)
+                    finally:
+                        loop.close()
+                
+                # Process adaptation results
+                if results:
+                    for agent_name, new_code in results.items():
+                        if new_code:
+                            # Hot-swap the algorithm
+                            success = self._hot_swap_algorithm(agent_name, new_code, log)
+                            
+                            # Record the adaptation event
+                            if agent_name not in self.adaptation_results:
+                                self.adaptation_results[agent_name] = []
+                            
+                            self.adaptation_results[agent_name].append({
+                                'checkpoint': checkpoint_num,
+                                'tick': self.current_tick,
+                                'updated': success,
+                                'roi_before': next((t['current_roi'] for t in adaptation_tasks if t['agent_name'] == agent_name), 0)
+                            })
+                            
+                            if success and log:
+                                print(f"  🔄 {agent_name}: Algorithm UPDATED")
+                        else:
+                            if log:
+                                print(f"  ➡️ {agent_name}: Keeping current algorithm")
+                                
+            except Exception as e:
+                print(f"❌ Adaptation error: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    def _hot_swap_algorithm(self, agent_name: str, new_code: str, log: bool = True) -> bool:
+        """
+        Hot-swap an agent's algorithm code during simulation.
+        
+        This creates a new execute_trade function from the new code
+        and replaces the agent's on_tick behavior.
+        """
+        try:
+            if agent_name not in self.agent_manager.agents:
+                return False
+                
+            agent = self.agent_manager.agents[agent_name]
+            
+            # Compile and execute the new code to extract execute_trade
+            namespace = {'__name__': f'adapted_algo_{agent_name}'}
+            
+            # Add numpy if needed
+            try:
+                import numpy as np
+                namespace['np'] = np
+                namespace['numpy'] = np
+            except ImportError:
+                pass
+            
+            exec(new_code, namespace)
+            
+            if 'execute_trade' not in namespace:
+                if log:
+                    print(f"  ⚠️ {agent_name}: New code missing execute_trade function")
+                return False
+            
+            new_execute_trade = namespace['execute_trade']
+            
+            # Store the new code on the agent
+            agent._algorithm_code = new_code
+            agent._execute_trade = new_execute_trade
+            
+            # If the agent has a custom on_tick that wraps execute_trade, it should pick up the new function
+            # For GeneratedAlgorithmAgent, we need to update its execute function
+            if hasattr(agent, 'execute_trade_fn'):
+                agent.execute_trade_fn = new_execute_trade
+            
+            if log:
+                print(f"  ✅ {agent_name}: Successfully swapped algorithm")
+            
+            return True
+            
+        except Exception as e:
+            if log:
+                print(f"  ❌ {agent_name}: Hot-swap failed: {e}")
+            return False
         
     def _process_orders_through_book(self, orders: List[Dict[str, Any]], log: bool = True):
         """Process orders through the order book for realistic matching."""
@@ -488,7 +782,9 @@ class MarketSimulation:
             },
             'leaderboard': leaderboard,
             'order_book_stats': self.order_book.get_stats() if self.config.enable_order_book else {},
-            'tick_history': self.tick_history
+            'tick_history': self.tick_history,
+            'adaptation_enabled': self.config.enable_adaptation,
+            'adaptation_results': self.adaptation_results if self.config.enable_adaptation else {}
         }
         
         return results
