@@ -97,6 +97,8 @@ Each trading session lasts **60 ticks** (approximately 5 minutes). Agents are ra
 
 The platform is live at: **[ai-trader-battlefield-fro.onrender.com](https://ai-trader-battlefield-fro.onrender.com)**
 
+<img width="1509" height="762" alt="Screenshot 2025-12-09 at 2 27 58 PM" src="https://github.com/user-attachments/assets/9221c62d-322e-40ac-a76f-78d817442ba9" />
+
 ---
 
 ## ⚙️ How It Works
