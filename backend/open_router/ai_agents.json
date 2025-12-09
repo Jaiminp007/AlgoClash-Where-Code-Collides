@@ -1,13 +1,4 @@
 {
-  "Anthropic": [
-    "anthropic/claude-opus-4.5",
-    "anthropic/claude-sonnet-4.5",
-    "anthropic/claude-opus-4",
-    "anthropic/claude-sonnet-4",
-    "anthropic/claude-3.7-sonnet",
-    "anthropic/claude-3.5-haiku",
-    "anthropic/claude-3-opus"
-  ],
   "Google": [
     "google/gemini-2.0-flash-001",
     "google/gemini-2.5-flash-preview-09-2025",
@@ -16,7 +7,7 @@
     "google/gemini-2.5-flash"
   ],
   "DeepSeek": [
-    "deepseek/deepseek-v3.2",
+    "deepseek/deepseek-v3.1",
     "deepseek/deepseek-r1-0528-qwen3-8b",
     "deepseek/deepseek-r1-distill-llama-70b"
   ],
@@ -26,12 +17,6 @@
   "Qwen": [
     "qwen/qwen3-coder:free",
     "qwen/qwen3-235b-a22b:free"
-  ],
-  "Moonshotai": [
-    "moonshotai/kimi-k2-thinking"
-  ],
-  "X-AI": [
-    "x-ai/grok-4.1-fast:free"
   ],
   "NVidia": [
     "nvidia/nemotron-nano-9b-v2"
